@@ -36,5 +36,8 @@ Thumbs.db
 # Streamlit
 .streamlit/secrets.toml
 
+# Presentation mockup, not part of the codebase
+demo/
+
 CLAUDE.md
 
