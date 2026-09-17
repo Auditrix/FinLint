@@ -37,12 +37,15 @@ def extract_refs(formula, current_sheet, defined_names):
         if token.type != "OPERAND" or token.subtype != "RANGE":
             continue  # skip text, numbers, functions and operators
 
-        try:
-            range_boundaries(token.value.rpartition("!")[2])  # raises if not a real address
-            ref = _clean(token.value, current_sheet)
-        except ValueError:
-            # a defined name: use what it points to, or keep the bare name
-            ref = defined_names.get(token.value, token.value)
+        if token.value in defined_names:
+            # checked first: a short name like "DCF" would otherwise pass as a column
+            ref = _clean(defined_names[token.value], current_sheet)
+        else:
+            try:
+                range_boundaries(token.value.rpartition("!")[2])  # raises if not a real address
+                ref = _clean(token.value, current_sheet)
+            except ValueError:
+                ref = token.value  # an undefined name, kept so nothing is lost
 
         if ref not in refs:
             refs.append(ref)

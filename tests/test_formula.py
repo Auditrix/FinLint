@@ -28,7 +28,8 @@ def test_parse_ref(ref,expected):
      ("=Unknown*2","S",{},["Unknown"]),
      ("=SUM(A:A)","S",{},["S!A:A"]),
      ("=SUM(3:3)","S",{},["S!3:3"]),
-     #("=[Budget.xlsx]Sheet!A1","S",{},["[Budget.xlsx]Sheet!A1"])
+     ("=[Budget.xlsx]Sheet!A1","S",{},["[Budget.xlsx]Sheet!A1"]),
+     ("=SUM(DCF)", "S", {"DCF": "'DCF Analysis'!$B$2:$H$24"}, ["DCF Analysis!B2:H24"]),
      ("='MV Debt and Weighted YTM(Rd)'!B4","S",{},["MV Debt and Weighted YTM(Rd)!B4"]),
      (None,"S",{},[])
     ],
