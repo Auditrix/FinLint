@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from finlint.parsing.model import Cell, Sheet, Workbook
 
@@ -16,10 +17,14 @@ def get_formula_details(cell):
     if isinstance(cell.value, str):
         return cell.value, None
 
-    # Array formulas come as objects, so I read their text and range separately.
-    formula = cell.value.text
-    array_range = cell.value.ref
-    return formula, array_range
+    if isinstance(cell.value, ArrayFormula):
+        return cell.value.text, cell.value.ref
+
+    # Excel data tables have a range but do not store normal formula text.
+    if isinstance(cell.value, DataTableFormula):
+        return "=TABLE()", cell.value.ref
+
+    return None, None
 
 
 def get_defined_names(excel_workbook):

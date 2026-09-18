@@ -1,5 +1,6 @@
 from openpyxl import Workbook as OpenpyxlWorkbook
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.worksheet.formula import DataTableFormula
 
 from finlint.parsing.reader import read_workbook
 
@@ -54,3 +55,18 @@ def test_reader_rejects_a_missing_file(tmp_path):
         assert "Workbook not found" in str(error)
     else:
         raise AssertionError("A missing workbook should raise FileNotFoundError")
+
+
+def test_reader_handles_a_data_table_formula(tmp_path):
+    path = tmp_path / "data_table.xlsx"
+    workbook = OpenpyxlWorkbook()
+    sheet = workbook.active
+    sheet.title = "WACC and Growth"
+    sheet["P9"] = DataTableFormula(ref="P9:Q12", dt2D=True, r1="$B$1", r2="$B$2")
+    workbook.save(path)
+
+    result = read_workbook(path)
+    cell = result.sheets["WACC and Growth"].cells["P9"]
+
+    assert cell.formula == "=TABLE()"
+    assert cell.array_range == "P9:Q12"
