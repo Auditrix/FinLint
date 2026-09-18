@@ -21,9 +21,16 @@ def _clean(piece, current_sheet):
     """Turn one raw range piece into the agreed format: sheet named, no quotes, no $."""
     if piece.startswith("["):  # external link, kept exactly as written
         return piece
-    sheet, coord = parse_ref(piece)
-    sheet = sheet.replace("'", "") or current_sheet
-    coord = coord.replace("$", "")
+
+    # Excel can repeat the sheet on both sides, e.g. "Commandes!$C9:Commandes!BJ9".
+    left, separator, right = piece.partition(":")
+    left_sheet, left_coord = parse_ref(left)
+    right_sheet, right_coord = parse_ref(right)
+
+    sheet = (left_sheet or right_sheet).replace("'", "") or current_sheet
+    coord = left_coord.replace("$", "")
+    if separator:
+        coord = coord + ":" + right_coord.replace("$", "")
     return make_ref(sheet, coord)
 
 
