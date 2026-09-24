@@ -3,6 +3,13 @@
 from openpyxl.formula import Tokenizer
 from openpyxl.utils.cell import range_boundaries
 
+# These functions take a cell but never read its value, they only ask where it
+# sits. COLUMN(AA56) answers 27 whatever AA56 contains, so it is not a
+# dependency. Treating it as one invented 120 false circular references in Fisy.
+# Note: ROW() and COLUMN() with empty brackets mean "my own row" and "my own
+# column". That is a dependency on position, not on a cell, so the map ignores it.
+POSITION_FUNCTIONS = ("COLUMN", "ROW", "COLUMNS", "ROWS", "ADDRESS")
+
 
 def make_ref(sheet, coord):
     """Build a reference, e.g. ("BFR", "B12") -> "BFR!B12". The only place refs are built."""
@@ -40,9 +47,30 @@ def extract_refs(formula, current_sheet, defined_names):
         return []
 
     refs = []
+    depth = 0             # how deep inside brackets we are
+    position_depth = None # the depth a position function opened at, if we are in one
+
     for token in Tokenizer(formula).items:
+        if token.subtype == "OPEN":  # a function bracket or a plain bracket
+            depth += 1
+            # Only the outermost position function matters, an inner one is
+            # already being skipped.
+            if (position_depth is None and token.type == "FUNC"
+                    and token.value.rstrip("(").upper() in POSITION_FUNCTIONS):
+                position_depth = depth
+            continue
+
+        if token.subtype == "CLOSE":
+            if position_depth is not None and depth == position_depth:
+                position_depth = None  # we have come back out of it
+            depth -= 1
+            continue
+
         if token.type != "OPERAND" or token.subtype != "RANGE":
-            continue  # skip text, numbers, functions and operators
+            continue  # skip text, numbers and operators
+
+        if position_depth is not None:
+            continue  # inside COLUMN(...) and friends, the cell is not read
 
         if token.value in defined_names:
             # checked first: a short name like "DCF" would otherwise pass as a column
