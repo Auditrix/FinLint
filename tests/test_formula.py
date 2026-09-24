@@ -30,6 +30,15 @@ def test_parse_ref(ref,expected):
      ("=SUM(3:3)","S",{},["S!3:3"]),
      ("=[Budget.xlsx]Sheet!A1","S",{},["[Budget.xlsx]Sheet!A1"]),
      ("=SUM(DCF)", "S", {"DCF": "'DCF Analysis'!$B$2:$H$24"}, ["DCF Analysis!B2:H24"]),
+     # A position function asks where a cell sits, it never reads the value,
+     # so its argument is not a dependency. Taken from a real Fisy formula that
+     # otherwise looked like 120 circular references.
+     ("=COLUMN(AA$56)-(COLUMN($C$56)+SUM(B1:B2))","S",{},["S!B1:B2"]),
+     ("=ROW(A5)+A1","S",{},["S!A1"]),
+     ("=ROWS(A1:A9)+COLUMNS(B1:D1)","S",{},[]),
+     ("=ADDRESS(ROW(A1),COLUMN(A1))","S",{},[]),
+     ("=INDEX(C22:BJ22,,COLUMN(AA56))","S",{},["S!C22:BJ22"]),
+     ("=COLUMN(A1)+SUM(COLUMN(B1),C5)","S",{},["S!C5"]),
      ("='MV Debt and Weighted YTM(Rd)'!B4","S",{},["MV Debt and Weighted YTM(Rd)!B4"]),
      (None,"S",{},[])
     ],
