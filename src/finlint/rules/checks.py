@@ -17,7 +17,9 @@ from finlint.parsing.model import EXCEL_ERRORS
 from finlint.rules.model import Finding
 
 # One cell reference, e.g. "B12", "$C$81", "AA7". Used to compare formula shapes.
-REFERENCE = re.compile(r"\$?[A-Za-z]{1,3}\$?\d+")
+# The guards on both sides stop it swallowing a function name that ends in a
+# digit, such as LOG10, which would otherwise look exactly like a reference.
+REFERENCE = re.compile(r"(?<![A-Za-z0-9_.])\$?[A-Za-z]{1,3}\$?\d+(?![A-Za-z0-9_.(])")
 
 
 def _rows_by_number(sheet):
@@ -76,6 +78,11 @@ def check_dead_inputs(workbook, graph: Graph) -> list[Finding]:
     findings = []
 
     for sheet in workbook.sheets.values():
+        # A sheet holding no formulas at all is a table of data, not a calculation,
+        # so nothing on it reads anything and every cell would be reported.
+        if not any(c.formula for c in sheet.cells.values()):
+            continue
+
         for cell in sheet.cells.values():
             node = make_ref(cell.sheet, cell.coordinate)
             # Text is skipped, or every heading and label would be reported.
@@ -131,8 +138,9 @@ def check_hardcoded_value(workbook, graph: Graph) -> list[Finding]:
 
 
 def check_broken_links(workbook, graph: Graph) -> list[Finding]:
-    """A formula pointing at a sheet or a workbook that is not there."""
+    """A formula pointing at a sheet, a name or a workbook that is not there."""
     findings = []
+    known_sheets = {name.casefold() for name in workbook.sheets}
 
     for sheet in workbook.sheets.values():
         for cell in sheet.cells.values():
@@ -144,7 +152,13 @@ def check_broken_links(workbook, graph: Graph) -> list[Finding]:
 
                 if ref.startswith("["):
                     reason = f"reads from another workbook, which is not available: {ref}"
-                elif sheet_name not in workbook.sheets:
+                elif not sheet_name:
+                    # No sheet at all means extract_refs could not resolve a name,
+                    # which is what Excel shows as #NAME?.
+                    reason = f"uses the name {ref}, which is not defined anywhere"
+                elif sheet_name.casefold() not in known_sheets:
+                    # Excel treats sheet names as case insensitive, so Config and
+                    # config are the same sheet and neither is a broken link.
                     reason = f"reads from a sheet that does not exist: {ref}"
                 else:
                     continue
