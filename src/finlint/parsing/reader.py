@@ -1,11 +1,19 @@
 """Read data from an Excel workbook."""
 
+from datetime import timedelta
 from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from finlint.parsing.model import Cell, Sheet, Workbook
+
+
+def normalise_cell_value(value):
+    """Convert Excel durations to their stored number of days."""
+    if isinstance(value, timedelta):
+        return value.total_seconds() / 86400
+    return value
 
 
 def get_formula_details(cell):
@@ -90,7 +98,7 @@ def read_workbook(path: str | Path) -> Workbook:
                         coordinate=formula_cell.coordinate,
                         formula=formula,
                         data_type=formula_cell.data_type,
-                        cached_value=value_cell.value,
+                        cached_value=normalise_cell_value(value_cell.value),
                         number_format=formula_cell.number_format,
                         array_range=array_range,
                     )

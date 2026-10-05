@@ -1,8 +1,10 @@
+from datetime import timedelta
+
 from openpyxl import Workbook as OpenpyxlWorkbook
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.formula import DataTableFormula
 
-from finlint.parsing.reader import read_workbook
+from finlint.parsing.reader import normalise_cell_value, read_workbook
 
 
 def make_workbook(path):
@@ -70,3 +72,7 @@ def test_reader_handles_a_data_table_formula(tmp_path):
 
     assert cell.formula == "=TABLE()"
     assert cell.array_range == "P9:Q12"
+
+
+def test_reader_converts_excel_duration_to_days():
+    assert normalise_cell_value(timedelta(hours=36)) == 1.5
