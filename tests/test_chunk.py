@@ -7,6 +7,8 @@ load it, because the token limit is the whole reason this module exists.
 No test here reads a file. A Page is built by hand, so everything runs in CI.
 """
 
+import pytest
+
 from finlint.rag.chunk import (
     MAX_TOKENS,
     Chunk,
@@ -21,6 +23,27 @@ from finlint.rag.corpus import Page
 # The overlap split_text uses by default. Named here so the tests that check
 # overlapping read clearly instead of repeating a bare 200.
 OVERLAP = 200
+
+
+def _tokenizer_available():
+    """Whether the embedding model's tokenizer can be loaded right now.
+
+    It is fetched from HuggingFace on first use, so an offline machine or a
+    rate limited CI run cannot load it. Those tests are skipped rather than
+    failed, because a red build caused by someone else's outage teaches us
+    nothing about our own code.
+    """
+    try:
+        _token_count("probe")
+        return True
+    except Exception:
+        return False
+
+
+needs_tokenizer = pytest.mark.skipif(
+    not _tokenizer_available(),
+    reason="embedding tokenizer could not be loaded, probably offline",
+)
 
 
 def make_page(text, page=1, section="Intro"):
@@ -191,11 +214,13 @@ def test_short_page_gives_one_chunk():
 
 # --- the token limit, the reason this module exists ------------------------
 
+@needs_tokenizer
 def test_text_within_the_limit_is_untouched():
     """A piece that already fits is returned as it is, not split."""
     assert _fit_token_limit("a short sentence") == ["a short sentence"]
 
 
+@needs_tokenizer
 def test_oversized_text_is_split_until_it_fits():
     """Text over 512 tokens is halved until every part fits.
 
@@ -210,6 +235,7 @@ def test_oversized_text_is_split_until_it_fits():
     assert all(_token_count(p) <= MAX_TOKENS for p in parts)
 
 
+@needs_tokenizer
 def test_no_chunk_from_a_page_exceeds_the_limit():
     """The guarantee, end to end: every chunk chunk_page emits fits the model.
 
