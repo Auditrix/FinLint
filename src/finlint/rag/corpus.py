@@ -97,8 +97,9 @@ NORMALISE = {
 PAGE_LABEL = re.compile(r"^Page\s+\d+(\s+of\s+\d+)?$", re.IGNORECASE)
 
 # The section sign starting an eCFR section number, written "§ 210.1-01".
-SECTION_SIGN = re.compile(r"^\s*§\s*")
-
+# Doubled for a range of sections, "§§ 210.14-01-02", which is the legal
+# convention, so the whole run of signs and spaces is matched rather than one.
+SECTION_SIGN = re.compile(r"^[\s§]+")
 
 class Page(BaseModel):
     """One page of one document, cleaned and ready to be chunked.
@@ -182,7 +183,6 @@ def _sections_by_page(outline: list[tuple[str, int]],
             current = sections[number]
 
     return sections
-
 
 def read_pdf(path) -> list[Page]:
     """Read one PDF into a list of Page records, one per page worth keeping."""
