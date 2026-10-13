@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from pgvector.psycopg import register_vector
-from sentence_transformers import SentenceTransformer
 
 from finlint.rag.chunk import Chunk,EMBEDDING_MODEL, _token_count
 
@@ -13,6 +12,10 @@ load_dotenv()
 DATABASE_URL=os.getenv("DATABASE_URL")
 
 cached_model=None
+
+# Prepended to a search question, never to a stored passage. See search().
+QUERY_PREFIX="Represent this sentence for searching relevant passages: "
+
 SCHEMA=[
     "CREATE EXTENSION IF NOT EXISTS vector;",
     "CREATE TABLE IF NOT EXISTS chunks(chunk_id text PRIMARY KEY, source text, title text, url text, page int NULL,section text NULL,text text, chunk_index int,token_count int, embedding vector(384), embedding_model text, ingested_at timestamptz);"
@@ -21,6 +24,11 @@ SCHEMA=[
 def _model():
     global cached_model
     if cached_model is None:
+        # Imported here, not at the top of the file. sentence_transformers
+        # pulls in torch, which takes about 40 seconds to import, and the
+        # tests that only check text handling never need it. Same reason
+        # chunk.py loads its tokenizer lazily.
+        from sentence_transformers import SentenceTransformer
         cached_model = SentenceTransformer(EMBEDDING_MODEL)
     return cached_model
 
@@ -50,7 +58,11 @@ def add_chunks(conn,chunks):
     conn.commit()
     
 def search(conn,query,limit=5):
-    query_embedding=embed([query])[0]
+    # The bge models are trained with this instruction on the QUERY only, never
+    # on the stored passages, so adding it needs no re-embedding of the corpus.
+    # Measured on our six rule questions: it moved two of them off an
+    # irrelevant chunk onto a relevant one and changed nothing for the rest.
+    query_embedding=embed([QUERY_PREFIX + query])[0]
     # dict_row returns each row as a dict keyed by column name, so callers read
     # row["score"] rather than row[8]. Adding a column later then changes
     # nothing, where with tuples it would silently shift every index.

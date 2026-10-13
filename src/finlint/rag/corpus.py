@@ -96,6 +96,14 @@ NORMALISE = {
 # but with a different number each time, so counting repeats cannot catch them.
 PAGE_LABEL = re.compile(r"^Page\s+\d+(\s+of\s+\d+)?$", re.IGNORECASE)
 
+# Control characters, keeping only tab and newline. Two documents need this.
+# Some FASAB handbook pages use a font with a broken encoding, so PyMuPDF
+# extracts raw byte codes instead of letters, giving runs like
+# "\x00\x02\x03\x02\x04" where words should be: 306 of them. The Treasury
+# USSGL has one stray NUL where a quotation mark belongs. None of it is text,
+# and PostgreSQL refuses to store a NUL byte in a text column at all.
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]")
+
 # The section sign starting an eCFR section number, written "§ 210.1-01".
 # Doubled for a range of sections, "§§ 210.14-01-02", which is the legal
 # convention, so the whole run of signs and spaces is matched rather than one.
@@ -125,6 +133,7 @@ def tidy(text: str) -> str:
     """
     for fancy, plain in NORMALISE.items():
         text = text.replace(fancy, plain)
+    text = CONTROL_CHARS.sub("", text)       # unprintable bytes, see above
     text = re.sub(r"[ \t]+", " ", text)      # runs of spaces become one
     text = re.sub(r"\n{3,}", "\n\n", text)   # runs of blank lines become one
     return text.strip()
