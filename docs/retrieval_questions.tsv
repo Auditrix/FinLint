@@ -1,0 +1,51 @@
+id	question	source	page	section	anchor
+1	What independent checks should be used for calculations and accounting classifications?	gao_fam_vol1.pdf	227		Calculations, extensions, additions, and accounting classifications are independently reviewed.
+2	How can an auditor test the mathematical accuracy of entity records?	gao_fam_vol1.pdf	289		Recalculation by testing the mathematical accuracy of information
+3	Why can heavy use of spreadsheets to prepare financial statements be a risk?	gao_fam_vol1.pdf	152		A high degree of manual activity or spreadsheet use is required
+4	What controls should management have when cash flow spreadsheet formulas change?	fasab_handbook_2025.pdf	2370		Assess the internal control used by management to ensure that changes made to cash flow spreadsheet formulas are appropriate.
+5	How can an error in linked cash flow spreadsheets affect other programs?	fasab_handbook_2025.pdf	2366		an agency misstates a cash flow assumption
+6	What should an auditor do when cash flow spreadsheet warning messages are suppressed?	fasab_handbook_2025.pdf	2377		determine whether the suppression of any error messages was appropriate
+7	Do spreadsheets count as documentary audit evidence?	gao_yellow_book_2024.pdf	219		Documentary evidence is already existing information
+8	What risks arise from using information technology in control activities?	gao_green_book_2025.pdf	31		Information technology may be incorporated into business processes to reduce the risk of human error
+9	When must a significant entity provide year-end statement variance analyses as a spreadsheet or PDF?	omb_circular_a136_2026.pdf	117		Significant entities must provide year-end financial statement variance analyses
+10	How should an auditor assess whether calculations in a complex financial model are mathematically accurate?	gao_fam_vol2.pdf	248		whether the calculations are applied in accordance with the method and are mathematically accurate
+11	Why should an auditor understand the design of a federal entity's budget formulation process?	gao_fam_vol1.pdf	105		misstatements and internal control deficiencies may affect the budget formulation process
+12	Which type of source normally provides stronger audit evidence, an independent third party or the entity itself?	gao_fam_vol1.pdf	291		Evidence obtained from independent third parties provides a higher level of assurance
+13	What should an auditor do after scanning account details reveals an unusual item?	gao_fam_vol1.pdf	293		The auditor should investigate unusual items identified through scanning
+14	What relationships does a substantive analytical procedure examine?	gao_fam_vol1.pdf	293		analysis of plausible relationships among both financial and nonfinancial data
+15	When might an audit require a specialist with expertise outside accounting or auditing?	gao_fam_vol2.pdf	23		expertise in a field other than accounting or auditing
+16	What corroborative procedures can an auditor use to evaluate a specialist's work?	gao_fam_vol2.pdf	30		performing detailed analytical procedures
+17	What should an auditor evaluate about the assumptions and methods in a specialist's model?	gao_fam_vol2.pdf	31		evaluating the relevance and reasonableness of those assumptions and methods
+18	What should be checked when management's specialist relies on significant source data?	gao_fam_vol2.pdf	36		the relevance and reliability of those source data
+19	Is the federal financial reporting checklist itself authoritative and comprehensive?	gao_fam_vol3.pdf	11		checklist itself is not authoritative or comprehensive
+20	What professional judgment is expected of users of the federal financial reporting checklist?	gao_fam_vol3.pdf	7		Users should exercise appropriate professional judgment
+21	How do component entities contribute to a government-wide financial report?	gao_fam_vol3.pdf	16		component reporting entities must identify and include in their GPFFRs all consolidation entities
+22	What qualities make federal financial reporting reliable?	fasab_handbook_2025.pdf	1006		financial reporting should be reliable
+23	What is internal control intended to provide for financial reporting?	fasab_handbook_2025.pdf	2367		provide reasonable assurance regarding the achievement of reliable financial reporting
+24	How should management compare projected and actual cash flows when auditing credit subsidies?	fasab_handbook_2025.pdf	2368		Review management's comparison of projected cash flows to actual cash flows
+25	Why does the quality of system-generated information matter to financial reports?	fasab_handbook_2025.pdf	2371		The quality of system-generated information affects management's ability to prepare reliable financial reports.
+26	At what level must federal credit subsidies be accounted for before they are aggregated?	fasab_handbook_2025.pdf	2373		account for subsidies at the cohort level in their accounting systems
+27	What documentation supports cash flow assumptions when relevant historical experience is missing?	fasab_handbook_2025.pdf	2408		the agency should document the basis for cash flow assumptions
+28	Which control activities help make information processing complete, accurate, and valid?	gao_green_book_2025.pdf	71		Control activities over information processing
+29	Can control activities be automated, manual, or partially automated?	gao_green_book_2025.pdf	75		Control activities can be designed and implemented in an automated, partially automated, or a manual manner.
+30	What turns relevant data from reliable sources into quality information?	gao_green_book_2025.pdf	91		Management processes relevant data obtained or generated from reliable sources into quality information
+31	What should management do after identifying internal control deficiencies?	gao_green_book_2025.pdf	102		Management evaluates and documents internal control issues and determines appropriate corrective actions
+32	When should auditors assess internal control during a performance audit?	gao_yellow_book_2024.pdf	204		If internal control is determined to be significant to the audit objectives
+33	What do application controls in information systems help ensure?	gao_yellow_book_2024.pdf	208		application controls, sometimes referred to as business process controls
+34	How should auditors decide the amount and type of evidence needed for an audit?	gao_yellow_book_2024.pdf	213		Auditors should determine the amount and type of evidence needed
+35	Can a large volume of audit evidence make up for poor reliability?	gao_yellow_book_2024.pdf	218		Having a large volume of evidence does not compensate for a lack of relevance, validity, or reliability.
+36	What does disclosure mean in the federal financial reporting circular?	omb_circular_a136_2026.pdf	6		refer to information in the notes to the financial statements
+37	When were significant entities required to submit unaudited interim statements for 2026?	omb_circular_a136_2026.pdf	8		financial statements and notes by August 17, 2026
+38	What service is used to submit draft federal agency financial reports?	omb_circular_a136_2026.pdf	9		Agencies are required to use MAX
+39	What kinds of mistakes count as errors in federal financial statements?	omb_circular_a136_2026.pdf	22		errors in financial statements result from mathematical mistakes
+40	What does the SEC Financial Reporting Manual say about domestic issuers and Regulation S-X?	sec_financial_reporting_manual.pdf	51		Regulation S-X and U.S. GAAP must be followed by domestic issuers.
+41	How should fiscal year data generally be ordered in an SEC filing?	sec_financial_reporting_manual.pdf	53		Consistent chronological order generally should be followed
+42	What interim disclosures are expected when a new accounting standard is adopted?	sec_financial_reporting_manual.pdf	54		the annual and the interim period financial statement disclosures
+43	When may a non-reporting target use scaled reporting in Form S-4?	sec_financial_reporting_manual.pdf	62		may apply the scaled reporting requirements for a smaller reporting company
+44	Do the proprietary and budgetary account sets in the U.S. Standard General Ledger balance independently?	treasury_ussgl_part1_2026.pdf	39		the proprietary and budgetary sets of general ledger accounts are self-balancing
+45	What is the normal balance of Fund Balance With Treasury account 101000?	treasury_ussgl_part1_2026.pdf	40		101000 Fund Balance With Treasury Debit
+46	Which Treasury ledger account number is for investments in U.S. Treasury securities issued by Fiscal Service?	treasury_ussgl_part1_2026.pdf	43		161000 Investments in U.S. Treasury Securities Issued by the Bureau of the Fiscal Service
+47	What is a material weakness in internal control over financial reporting?	ecfr_title17.xml		210.1-02	Material weakness means a deficiency, or a combination of deficiencies
+48	How many recent fiscal-year balance sheets does Regulation S-X normally require?	ecfr_title17.xml		210.3-01	audited balance sheets as of the end of each of the two most recent fiscal years
+49	When are financial statements filed with the SEC presumed misleading or inaccurate?	ecfr_title17.xml		210.4-01	financial statements filed with the Commission which are not prepared in accordance with generally accepted accounting principles
+50	Whose conclusions about disclosure controls must a registrant disclose?	ecfr_title17.xml		229.307	Disclose the conclusions of the registrant's principal executive and principal financial officers
