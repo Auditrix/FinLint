@@ -1,12 +1,12 @@
 """Review detector findings without allowing the model to invent cells."""
 
 import json
-import re
 from collections.abc import Callable, Sequence
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from finlint.agents.safe_input import has_formula_text, safe_finding, safe_formula, safe_value
+from finlint.guardrails.cells import CELL_ADDRESS, normalise_coordinate, verify_cell
 from finlint.parsing.model import Workbook
 from finlint.rules.model import Finding
 
@@ -28,7 +28,6 @@ class ReviewedFinding(BaseModel):
     reason: str
 
 
-CELL_ADDRESS = re.compile(r"(?<![A-Za-z0-9_])\$?[A-Za-z]{1,3}\$?\d+(?![A-Za-z0-9_])")
 ALWAYS_REVIEW = {
     "error_cells": "Excel displays an error, so a person should review it.",
     "circular_reference": "A calculation loop needs human review.",
@@ -68,10 +67,10 @@ def review_findings(
     reviewable = []
     kept = {}
     for i, finding in enumerate(findings):
-        sheet = workbook.sheets.get(finding.sheet)
-        if sheet is None or finding.coordinate not in sheet.cells:
+        if not verify_cell(workbook, finding.sheet, finding.coordinate):
             raise ValueError(f"Finding is not in workbook: {finding.sheet}!{finding.coordinate}")
-        cell = sheet.cells[finding.coordinate]
+        sheet = workbook.sheets[finding.sheet]
+        cell = sheet.cells[normalise_coordinate(finding.coordinate)]
         if finding.rule_id in ALWAYS_REVIEW:
             kept[i] = ReviewedFinding(finding=finding, reason=ALWAYS_REVIEW[finding.rule_id])
             continue

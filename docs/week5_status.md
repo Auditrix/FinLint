@@ -1,9 +1,34 @@
-# Week 5 status (14 October 2026)
+# Week 5 status (15 October 2026)
 
 ## What works
 
 `scripts/check_agents.py` reads a workbook, runs the fixed rules, searches the
 local corpus, asks the Standards and Auditor agents, and saves a JSON report.
+It now also adds a plain-text written report. If the Auditor returns invalid
+output, the finding stays in that report for human review instead of vanishing.
+
+`guardrails/cells.py` checks a reported location against nonempty cells in the
+parsed workbook. The Auditor uses that check, and the written report drops
+locations that are not in the workbook. The Standards agent rejects an answer
+that adds a cell address or URL in its own explanation, even if its quote is
+real. The report takes its displayed locations from checked findings, never
+from model prose.
+
+`guardrails/injection.py` makes a workbook with a text cell telling the system
+to report the file as clean. Its probe and tests show that the text does not
+reach the Auditor's model prompt, the real finding stays visible, and the file
+does not change. The fixture maker refuses to overwrite an existing workbook.
+The report model sees only counts of findings, not raw workbook contents.
+On 15 October, a live Groq probe of this text-cell attack kept the finding,
+did not send the hostile text to the model, and left the workbook unchanged.
+
+`agents/report.py` makes one model call for a short overview and templates the
+finding details and source citations itself. It uses the title, page and URL
+from the checked Standards result; the section label is not used because PDF
+outlines can be coarser than the real page. An invalid or unavailable model
+response falls back to fixed wording and cannot erase a finding. A citation
+is presented as context for review, not proof that a cell is wrong.
+
 For `data/seeds/Financial_Models.xlsx`, the tested finding is the real Excel
 `#VALUE!` at `Beta computation!O307`. It is kept for human review. The final
 run is in `data/generated/week5_error_cells_check_final.json`. This error is
@@ -50,8 +75,15 @@ and `data/generated/week5_hardcode_gptoss_context_trial.json`.
 - Previous live investment-advice and invented-location probes were rejected.
   Unit tests also reject invented quotes. These examples do not prove
   resistance to every wording or future model.
-- `python -m pytest -q` in the project environment: 175 passed. The warnings
+- The local full test suite with PostgreSQL running: 191 passed. New tests use
+  a real small `.xlsx` file through the reader, rules, both agents and report.
+  They use a fake model and source hit so they do not need network access. The warnings
   are from openpyxl's use of deprecated Python datetime calls.
+- A live run of `scripts/check_agents.py` on `Financial_Models.xlsx` found
+  `Beta computation!O307`, kept it without an Auditor model call, checked one
+  contextual FASAB citation, and wrote a report. The local output is
+  `data/generated/week5_agent_report_live.json`. The report includes the
+  source title, page and URL, and omits the unreliable section label.
 
 ## Keep or rewind
 
@@ -61,29 +93,36 @@ flagged, and one real but general quote is available with an honest context
 label. Do not claim that retrieval improved or that the citation establishes
 a spreadsheet rule. A broader evaluation could still change this decision.
 
-## Still needs a team decision
+## Agreed follow-ups
 
 - The corpus lacks broadly applicable, spreadsheet-specific guidance for
   several rules. A candidate is the public U.S. GAO
   [Cost Estimating and Assessment Guide](https://www.gao.gov/products/gao-20-195g).
   Its chapter on validating cost estimates explicitly discusses checking
   spreadsheet formulas and data inputs. It is about **cost estimates**, so it
-  should not be presented as a universal accounting rule. Nara owns corpus
-  ingestion; add it only after agreeing on source scope and metadata.
+  should not be presented as a universal accounting rule. Nara agreed to add
+  it and owns corpus ingestion; this local work did not re-ingest documents.
 - The shared rule-to-question mapping and search ranking are Nara's files.
-  The Standards agent currently sees two hits from each search. Some target
-  passages in the 50-question diagnostic were only at ranks 7 to 10. Agree whether to
-  change query wording, candidate count, or the corpus before editing the
-  shared retrieval interface.
+  With Nara's agreement, the Standards agent now sees five hits per search.
+  This does not change the retriever's ranking, and target passages at ranks
+  7 to 10 still need better queries or a separate retrieval change.
 - The 50-question diagnostic is not a blind holdout, and four hostile formula
   wordings are not a comprehensive security evaluation. Report both limits
   in the final review.
+- The new report path has a live PostgreSQL and Groq check on one real finding.
+  This is a smoke test, not evidence that every rule or workbook will work.
 
 ## Reproduce
 
 Run these with the project Python environment from the repository root after
 starting PostgreSQL and loading the corpus. Live agent checks also need
 `GROQ_API_KEY` in the ignored `.env`.
+
+For Nara's pipeline, `write_report(workbook, reviewed_findings,
+standards_by_cell, complete)` returns plain text. The mapping is keyed by
+`(finding.sheet, finding.coordinate)` and should contain the result of
+`explain_with_retriever` for each finding. The report does not retrieve or
+verify new quotes itself.
 
 ```powershell
 python scripts/ingest_corpus.py

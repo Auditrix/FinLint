@@ -124,11 +124,11 @@ def test_standards_accepts_quote_across_neighbors():
 
 
 def test_standards_keeps_prompt_small_and_uses_top_hits():
-    hits = [_hit("A" * 10000, index=i) for i in range(5)]
+    hits = [_hit("A" * 10000, index=i) for i in range(6)]
     prompts = []
     reply = json.dumps({
         "action": "answer", "explanation": "Found a matching passage.",
-        "citations": [{"evidence_id": 0, "quote": "A" * 45}],
+        "citations": [{"evidence_id": 4, "quote": "A" * 45}],
     })
 
     def complete(system, user):
@@ -137,8 +137,9 @@ def test_standards_keeps_prompt_small_and_uses_top_hits():
 
     result = explain_finding(FINDING, lambda query: hits, complete)
     assert result.supported
-    assert len(prompts[0]) < 4000
-    assert '"evidence_id": 2' not in prompts[0]
+    assert len(prompts[0]) < 9000
+    assert '"evidence_id": 4' in prompts[0]
+    assert '"evidence_id": 5' not in prompts[0]
 
 
 def test_standards_adapter_uses_follow_up_query(monkeypatch):
@@ -159,11 +160,11 @@ def test_standards_adapter_uses_follow_up_query(monkeypatch):
         }),
     ])
     result = explain_with_retriever(
-        object(), FINDING, lambda system, user: next(replies), limit=2
+        object(), FINDING, lambda system, user: next(replies)
     )
     assert result.supported
-    assert searched[0] == ("hardcoded_value", FINDING.message, 2)
-    assert searched[1] == ("standards_followup", "input exception", 2)
+    assert searched[0] == ("hardcoded_value", FINDING.message, 5)
+    assert searched[1] == ("standards_followup", "input exception", 5)
 
 
 def _workbook(value=10):

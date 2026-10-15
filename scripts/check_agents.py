@@ -2,8 +2,9 @@
 
 import argparse
 
-from finlint.agents.auditor import review_findings
+from finlint.agents.auditor import ReviewedFinding, review_findings
 from finlint.agents.groq_provider import groq_completion
+from finlint.agents.report import write_report
 from finlint.agents.standards import explain_with_retriever
 from finlint.eval.score import save_report
 from finlint.graph.build import build_graph
@@ -45,8 +46,18 @@ def main():
     try:
         reviewed = review_findings(workbook, [finding], complete_auditor)
     except ValueError as error:
-        reviewed = []
+        reviewed = [ReviewedFinding(
+            finding=finding,
+            reason="Auditor unavailable; keep this finding for human review.",
+        )]
         review_error = str(error)
+
+    written_report = write_report(
+        workbook,
+        reviewed,
+        {(finding.sheet, finding.coordinate): standards},
+        complete,
+    )
 
     report = {
         "model": args.model,
@@ -57,6 +68,7 @@ def main():
         "auditor_model_calls": auditor_model_calls,
         "auditor_reason": reviewed[0].reason if reviewed else None,
         "auditor_error": review_error,
+        "written_report": written_report,
     }
     save_report(args.output, report)
     print("Verified context found:", standards.supported)
@@ -64,6 +76,7 @@ def main():
     print("Verified citations:", len(standards.citations))
     print("Auditor kept finding:", report["auditor_kept_finding"])
     print("Auditor model calls:", auditor_model_calls)
+    print("Written report:\n" + written_report)
     print("Report:", args.output)
     if review_error:
         raise ValueError(review_error)

@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from finlint.agents.safe_input import safe_finding
+from finlint.guardrails.cells import CELL_ADDRESS
 from finlint.guardrails.citation_details import citation_details
 from finlint.rules.model import Finding
 
@@ -90,10 +91,10 @@ def explain_finding(
     evidence = []
     query = question_for(finding)
     for _ in range(max_searches):
-        for item in search(query)[:2]:
+        for item in search(query)[:5]:
             if item not in evidence:
                 evidence.append(item)
-        evidence = evidence[-4:]
+        evidence = evidence[-5:]
 
         visible = [
             {
@@ -126,11 +127,17 @@ def explain_finding(
             ]
         except ValueError:
             break
-        if len(checked) == len(step.citations) and (step.explanation or "").strip():
+        explanation = (step.explanation or "").strip()
+        has_new_location = (
+            CELL_ADDRESS.search(explanation)
+            or "http://" in explanation.lower()
+            or "https://" in explanation.lower()
+        )
+        if len(checked) == len(step.citations) and explanation and not has_new_location:
             return StandardsResult(
                 supported=True,
                 explanation="Context only; the citation does not prove this cell is wrong. "
-                + step.explanation.strip(),
+                + explanation,
                 citations=checked,
                 evidence_scope="contextual",
             )
@@ -139,7 +146,7 @@ def explain_finding(
     return StandardsResult(supported=False, explanation="No verifiable standard found")
 
 
-def explain_with_retriever(conn, finding: Finding, complete, limit: int = 2) -> StandardsResult:
+def explain_with_retriever(conn, finding: Finding, complete, limit: int = 5) -> StandardsResult:
     """Use the shared retriever for the first question and any follow-up searches."""
     from finlint.rag.retrieve import question_for, retrieve
 
