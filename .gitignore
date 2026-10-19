@@ -14,7 +14,7 @@ env/
 # Environment variables
 .env
 
-# Data (downloaded separately, see scripts/download_datasets.py)
+# Data (downloaded separately, see scripts/download_data.py)
 data/
 
 # Testing
@@ -41,3 +41,8 @@ demo/
 
 CLAUDE.md
 
+
+# Local scratch folders
+.docx_tools/
+.tmp_nbdeps2/
+.tmp_notebook_deps/
