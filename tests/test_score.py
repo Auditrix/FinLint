@@ -2,10 +2,12 @@ import json
 
 from finlint.eval.score import (
     cell_id,
+    finding_locations,
     load_excelint_annotations,
     precision_recall,
     resolve_excelint_workbook,
     score_findings,
+    subtract_baseline,
     tier_one_expected,
 )
 from finlint.rules.model import Finding
@@ -52,6 +54,14 @@ def test_score_findings_reports_each_rule():
     assert result["overall"]["recall"] == 0.5
     assert result["by_rule"]["error_cells"]["true_positives"] == 1
     assert result["by_rule"]["broken_link"]["false_positives"] == 1
+
+
+def test_subtract_baseline_keeps_only_new_finding_locations():
+    existing = finding("dead_input", "Sheet1", "A1")
+    new = finding("formula_drift", "Sheet1", "B1")
+    baseline = finding_locations([existing])
+
+    assert subtract_baseline([existing, new], baseline) == [new]
 
 
 def test_load_excelint_annotations_uses_column_then_row(tmp_path):

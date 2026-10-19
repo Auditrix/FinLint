@@ -58,6 +58,20 @@ def score_findings(expected: set, findings_by_workbook: dict[str, list]) -> dict
     }
 
 
+def finding_locations(findings: list) -> set[tuple[str, str]]:
+    """Return normalized sheet and coordinate pairs for a list of findings."""
+    return {(finding.sheet.casefold(), finding.coordinate.upper()) for finding in findings}
+
+
+def subtract_baseline(findings: list, baseline: set[tuple[str, str]]) -> list:
+    """Keep only findings that were not already present in the clean workbook."""
+    return [
+        finding
+        for finding in findings
+        if (finding.sheet.casefold(), finding.coordinate.upper()) not in baseline
+    ]
+
+
 def load_excelint_annotations(path: str | Path) -> set[tuple[str, str, str]]:
     """Read ExcelInt's [column, row, group] entries as workbook cell identities."""
     with Path(path).open(encoding="utf-8") as file:
@@ -96,11 +110,20 @@ def tier_one_expected(records: list[dict]) -> set[tuple[str, str, str]]:
 
 
 def evaluate_tier_one(records: list[dict], run_engine) -> dict:
-    """Recreate each planted fault, run the engine, and score its findings."""
+    """Score only findings added after each fault is planted."""
     findings_by_fault = {}
+    baselines = {}
 
     for record in records:
-        source_path = Path(record["source_path"])
+        source_path = Path(record["source_path"]).resolve()
+        source_key = str(source_path).casefold()
+
+        if source_key not in baselines:
+            clean_workbook = read_workbook(source_path)
+            clean_graph = build_graph(clean_workbook)
+            clean_findings = run_engine(clean_workbook, clean_graph)
+            baselines[source_key] = finding_locations(clean_findings)
+
         with TemporaryDirectory() as temporary_folder:
             mutated_path = Path(temporary_folder) / source_path.name
             write_mutated_copy(
@@ -112,9 +135,17 @@ def evaluate_tier_one(records: list[dict], run_engine) -> dict:
             )
             workbook = read_workbook(mutated_path)
             graph = build_graph(workbook)
-            findings_by_fault[str(record["fault_id"])] = run_engine(workbook, graph)
+            mutated_findings = run_engine(workbook, graph)
+            findings_by_fault[str(record["fault_id"])] = subtract_baseline(
+                mutated_findings,
+                baselines[source_key],
+            )
 
-    return score_findings(tier_one_expected(records), findings_by_fault)
+    report = score_findings(tier_one_expected(records), findings_by_fault)
+    report["baseline_findings"] = {
+        source: len(locations) for source, locations in baselines.items()
+    }
+    return report
 
 
 def evaluate_tier_two(
