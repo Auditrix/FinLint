@@ -34,6 +34,10 @@ def test_tidy_collapses_spaces():
     assert tidy("a   b") == "a b"
 
 
+def test_tidy_removes_nul_from_pdf_text():
+    assert tidy("audit\x00 evidence") == "audit evidence"
+
+
 def test_sections_carry_forward():
     """A page with no heading of its own belongs to the last heading before it.
 
