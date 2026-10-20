@@ -78,6 +78,10 @@ CORPUS = {
         "17 CFR (Regulation S-X and Regulation S-K)",
         "https://www.govinfo.gov/bulkdata/ECFR/title-17/ECFR-title17.xml",
     ),
+     "gao_cost_estimating_2020.pdf": (
+        "GAO Cost Estimating and Assessment Guide (GAO-20-195G, March 2020)",
+        "https://www.gao.gov/assets/d20195G.pdf",
+    ),
 }
 
 # Characters a PDF uses for typesetting, mapped to the plain equivalent a person

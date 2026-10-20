@@ -26,9 +26,15 @@ QUESTIONS = {
         "processing",
     "dead_input":
         "using relevant and reliable data in financial reporting processes",
+    # Reworded after adding the GAO Cost Estimating Guide, which is the only
+    # document in the corpus that talks about tracing a spreadsheet's
+    # calculations back to a source. The old wording returned a FASAB passage
+    # on accrual estimates, which was not about hardcoded inputs at all.
+    # A third wording scored higher still, but only by copying the target
+    # passage's own words, which is overfitting to one chunk, so it was not used.
     "hardcoded_value":
-        "documentation and review of assumptions and manual inputs used in "
-        "financial estimates",
+        "tracing calculations and modeling assumptions back to a documented "
+        "source",
     "broken_link":
         "completeness and integrity of data obtained from other systems or "
         "sources",
