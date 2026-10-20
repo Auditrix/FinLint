@@ -41,8 +41,9 @@ demo/
 
 CLAUDE.md
 
-
 # Local scratch folders
 .docx_tools/
 .tmp_nbdeps2/
 .tmp_notebook_deps/
+
+recalc_test.xlsx
