@@ -8,7 +8,7 @@ Every check has the same shape:  check_x(workbook, graph) -> list[Finding]
 import collections
 import re
 
-from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+from openpyxl.utils.cell import column_index_from_string, coordinate_from_string, get_column_letter
 
 from finlint.graph.analyse import blast_radius, find_cycles
 from finlint.graph.graph import Graph
@@ -73,6 +73,41 @@ def check_circular(workbook, graph: Graph) -> list[Finding]:
     return findings
 
 
+def _nearby_cells(sheet, coordinate):
+    letter, row = coordinate_from_string(coordinate)
+    column = column_index_from_string(letter)
+    left = sheet.cells.get(f"{get_column_letter(column - 1)}{row}") if column > 1 else None
+    right = sheet.cells.get(f"{get_column_letter(column + 1)}{row}")
+    return left, right
+
+
+def _is_year_heading(sheet, cell):
+    value = cell.cached_value
+    if not (1990 <= value <= 2100 and value == int(value)):
+        return False
+
+    left, right = _nearby_cells(sheet, cell.coordinate)
+    for neighbor in (left, right):
+        if (neighbor is not None
+                and neighbor.formula is None
+                and isinstance(neighbor.cached_value, (int, float))
+                and not isinstance(neighbor.cached_value, bool)
+                and abs(neighbor.cached_value - value) == 1):
+            return True
+    return False
+
+
+def _is_template_input(sheet, cell):
+    left, right = _nearby_cells(sheet, cell.coordinate)
+    has_label = left is not None and isinstance(left.cached_value, str) and bool(left.cached_value.strip())
+    if not has_label:
+        return False
+
+    if sheet.name.casefold() in {"config", "configuration"}:
+        return True
+    return cell.cached_value == 0 and right is not None and right.formula is not None
+
+
 def check_dead_inputs(workbook, graph: Graph) -> list[Finding]:
     """A typed number that no formula reads, so changing it changes nothing."""
     findings = []
@@ -88,7 +123,10 @@ def check_dead_inputs(workbook, graph: Graph) -> list[Finding]:
             # Text is skipped, or every heading and label would be reported.
             if (cell.formula is None
                     and isinstance(cell.cached_value, (int, float))
+                    and not isinstance(cell.cached_value, bool)
                     and not graph.feeds_into.get(node)):
+                if _is_year_heading(sheet, cell) or _is_template_input(sheet, cell):
+                    continue
                 findings.append(Finding(
                     rule_id="dead_input",
                     severity="low",

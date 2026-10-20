@@ -55,6 +55,38 @@ def test_dead_input_returns_unused_number_only():
     assert coordinates(checks.check_dead_inputs(workbook, graph)) == {("S", "A2")}
 
 
+def test_dead_input_skips_year_headings_but_not_an_isolated_year_value():
+    workbook = make_workbook(
+        [
+            Cell(sheet="S", coordinate="B2", data_type="n", number_format="General", cached_value=2021),
+            Cell(sheet="S", coordinate="C2", data_type="n", number_format="General", cached_value=2022),
+            Cell(sheet="S", coordinate="D2", data_type="n", number_format="General", cached_value=2023),
+            Cell(sheet="S", coordinate="B5", data_type="n", number_format="General", cached_value=2022),
+            Cell(sheet="S", coordinate="C5", data_type="n", number_format="General", cached_value=0.2),
+            Cell(sheet="S", coordinate="D8", data_type="f", number_format="General", formula="=1+1"),
+        ]
+    )
+    assert coordinates(checks.check_dead_inputs(workbook, Graph())) == {
+        ("S", "B5"), ("S", "C5")
+    }
+
+
+def test_dead_input_skips_labelled_config_value_and_opening_zero():
+    config = Sheet(name="Config", state="visible", cells={
+        "B1": Cell(sheet="Config", coordinate="B1", data_type="s", number_format="General", cached_value="Salary rate"),
+        "C1": Cell(sheet="Config", coordinate="C1", data_type="n", number_format="General", cached_value=0.22),
+        "C2": Cell(sheet="Config", coordinate="C2", data_type="n", number_format="General", cached_value=42),
+        "D3": Cell(sheet="Config", coordinate="D3", data_type="f", number_format="General", formula="=1+1"),
+    })
+    results = Sheet(name="Results", state="visible", cells={
+        "B4": Cell(sheet="Results", coordinate="B4", data_type="s", number_format="General", cached_value="Opening balance"),
+        "C4": Cell(sheet="Results", coordinate="C4", data_type="n", number_format="General", cached_value=0),
+        "D4": Cell(sheet="Results", coordinate="D4", data_type="f", number_format="General", formula="=C4+1"),
+    })
+    workbook = Workbook(path="test.xlsx", sheets={"Config": config, "Results": results})
+    assert coordinates(checks.check_dead_inputs(workbook, Graph())) == {("Config", "C2")}
+
+
 def test_hardcoded_value_finds_number_between_formulas():
     workbook = make_workbook(
         [
