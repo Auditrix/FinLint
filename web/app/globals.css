@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-sm text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Numbers line up in every column across the product. */
+  .font-mono,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* No ligatures in monospace. JetBrains Mono otherwise draws <= as a single
+     "less than or equal" glyph, so a reviewer would see a character that is
+     not in the formula. An audit tool shows formulas exactly as typed. */
+  .font-mono,
+  .code-surface,
+  code,
+  kbd {
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/40 ring-offset-1 ring-offset-canvas;
+  }
+
+  ::selection {
+    @apply bg-accent/15;
+  }
+}
+
+@layer components {
+  /* A card: white, a hairline, almost no shadow. */
+  .panel {
+    @apply rounded-lg border border-hairline bg-surface shadow-hairline;
+  }
+
+  .eyebrow {
+    @apply text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted;
+  }
+
+  .code-surface {
+    @apply rounded-md border border-hairline bg-recessed font-mono text-xs text-ink;
+  }
+}
+
+@layer utilities {
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
