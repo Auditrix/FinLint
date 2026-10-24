@@ -373,3 +373,27 @@ def test_a_version_gap_does_not_shift_the_reported_version(conn, temp_workbook):
     assert [r.version for r in history] == [1, 3, 4]
     assert first_seen(late, history) == 4
     assert first_seen(early, history) == 1
+
+
+@needs_db
+def test_a_save_after_a_read_survives_the_connection_closing(temp_workbook):
+    """A read before a save must not make the save vanish.
+
+    Any plain SELECT leaves a psycopg 3 connection inside a transaction. A save
+    wrapped in conn.transaction() on that connection only becomes a savepoint,
+    and it was discarded when the connection closed: verified to lose every run.
+    An API handler that reads, then saves, is exactly this sequence.
+    """
+    from finlint.rag.store import connect
+
+    name = Path(temp_workbook).name
+    result = check_file(temp_workbook)
+
+    first = connect()
+    load_history(first, name)          # a read, as an API handler would do
+    save_run(first, result)
+    first.close()                      # the handler ends without committing
+
+    second = connect()
+    assert len(load_history(second, name)) == 1
+    second.close()

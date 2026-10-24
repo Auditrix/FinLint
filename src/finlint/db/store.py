@@ -112,6 +112,12 @@ def save_run(conn, result) -> int:
 
     # conn.transaction() rolls back on any exception, so a half written run
     # can never reach the database.
+    #
+    # It is NOT enough on its own. If the caller already has a transaction open,
+    # which any plain SELECT leaves behind in psycopg 3, transaction() does not
+    # start a new one: it only makes a savepoint inside the open one. The run
+    # then looks saved, and is thrown away when the connection closes. The
+    # commit after this block is what makes the save durable either way.
     with conn.transaction(), conn.cursor() as cur:
         # 1. Find the file, or create it on first sight.
         cur.execute("SELECT id FROM files WHERE name = %s", (name,))
@@ -152,7 +158,11 @@ def save_run(conn, result) -> int:
               f.blast_radius) for f in result.findings],
         )
 
-    # No commit here: conn.transaction() commits on a clean exit.
+    # Durable even when the caller had a read open: commits the outer
+    # transaction that the block above may only have added a savepoint to.
+    # With nothing open it does nothing. Only reached on success, so a failed
+    # save still leaves nothing behind.
+    conn.commit()
     return run_id
 
 def load_history(conn, name) -> list[RunRecord]:
