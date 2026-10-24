@@ -32,6 +32,20 @@ class RunDiff(BaseModel):
     resolved: list[Finding] = Field(default_factory=list)     # was in previous, now gone
 
 
+class RunRecord(BaseModel):
+    """One past run: its stored version number and what it found.
+
+    first_seen takes these rather than bare lists so the version it reports is
+    the number actually stored with the run. Counting positions in a list
+    instead looks identical until a run goes missing from the middle: with
+    versions 1, 3 and 4 stored, position 3 holds version 4, and every badge
+    after the gap is wrong with nothing to show it.
+    """
+
+    version: int
+    findings: list[Finding] = Field(default_factory=list)
+
+
 def finding_key(finding: Finding) -> tuple[str, str, str]:
     """What makes two findings the same finding across two different runs.
 
@@ -81,15 +95,20 @@ def diff_runs(previous: list[Finding], current: list[Finding]) -> RunDiff:
     return RunDiff(new=new, still_there=still_there, resolved=resolved)
 
 
-def first_seen(finding: Finding, history: list[list[Finding]]) -> int | None:
-    """Which version a finding first appeared in, counting from 1.
+def first_seen(finding: Finding, history: list[RunRecord]) -> int | None:
+    """Which version a finding first appeared in.
 
-    history is every run of this workbook, oldest first, each one a plain list
-    of findings. The CURRENT run must be included, or every finding comes back
-    as None. The caller then compares: equal to the current version means
-    "new", anything lower means "pre-existing since v{n}".
+    history is every run of this workbook as RunRecords, oldest first. The
+    CURRENT run must be included, or every finding comes back as None. The
+    caller then compares: equal to the current version means "new", anything
+    lower means "pre-existing since v{n}".
 
     Returns None when the finding is in no run at all.
+
+    The version comes from the record, never from its position in the list.
+    Position only agrees with the version while the numbers run 1, 2, 3 with
+    nothing missing. Delete a run from the middle and position stops matching,
+    silently: with 1, 3 and 4 stored, position 3 holds version 4.
 
     Simplification worth knowing: a finding present in v1, gone in v2 and back
     in v3 is reported as v1. Arguably it returned in v3, but saying so needs
@@ -99,10 +118,10 @@ def first_seen(finding: Finding, history: list[list[Finding]]) -> int | None:
     # Computed once rather than rebuilt on every run in the loop.
     key = finding_key(finding)
 
-    # start=1 because people say "v1", while a Python list starts at 0. An
-    # off-by-one here reaches the screen and looks like a bug in the feature.
-    for version, run in enumerate(history, start=1):
-        if key in {finding_key(f) for f in run}:
-            return version  # the first match wins, so later runs never override it
+    # Sorted here rather than trusting the caller, because "earliest version"
+    # is meaningless if the records arrive out of order.
+    for record in sorted(history, key=lambda r: r.version):
+        if key in {finding_key(f) for f in record.findings}:
+            return record.version  # first match wins, so later runs never override it
 
     return None

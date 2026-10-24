@@ -4,7 +4,7 @@ No workbook, no database, no model. Every Finding is built by hand, so the
 whole file runs in milliseconds and in CI.
 """
 
-from finlint.lineage.diff import RunDiff, diff_runs, finding_key, first_seen
+from finlint.lineage.diff import RunDiff, RunRecord, diff_runs, finding_key, first_seen
 from finlint.rules.model import Finding
 
 
@@ -137,13 +137,13 @@ def test_everything_fixed_leaves_nothing_current():
 def test_present_in_every_run_returns_one():
     """A finding in all three runs has been there since version 1.
 
-    This one test catches two separate bugs. If the versions were numbered
-    from 0 it would return 0, and if the loop kept overwriting instead of
-    returning on the first match it would return 3.
+    Catches the overwrite bug: if the loop kept going instead of returning on
+    the first match, this would report 3.
     """
     f1 = make_finding("r1", "C15")
+    history = [RunRecord(version=v, findings=[f1]) for v in (1, 2, 3)]
 
-    assert first_seen(f1, [[f1], [f1], [f1]]) == 1
+    assert first_seen(f1, history) == 1
 
 
 def test_appearing_later_returns_that_version():
@@ -151,7 +151,11 @@ def test_appearing_later_returns_that_version():
     old = make_finding("r1", "C15")
     recent = make_finding("r2", "C16")
 
-    history = [[old], [old], [old, recent]]
+    history = [
+        RunRecord(version=1, findings=[old]),
+        RunRecord(version=2, findings=[old]),
+        RunRecord(version=3, findings=[old, recent]),
+    ]
 
     assert first_seen(recent, history) == 3
 
@@ -161,12 +165,46 @@ def test_unknown_finding_returns_none():
     f1 = make_finding("r1", "C15")
     stranger = make_finding("r2", "Z99")
 
-    assert first_seen(stranger, [[f1], [f1]]) is None
+    history = [RunRecord(version=1, findings=[f1]), RunRecord(version=2, findings=[f1])]
+
+    assert first_seen(stranger, history) is None
 
 
 def test_empty_history_returns_none():
     """Nothing to search, so there is no answer rather than a wrong one."""
     assert first_seen(make_finding("r1", "C15"), []) is None
+
+
+def test_version_comes_from_the_record_not_the_position():
+    """A gap in the version numbers must not shift the answer.
+
+    With versions 1, 3 and 4 stored, the run at position 3 is version 4.
+    Counting positions reported 3 here, so the badge read "since v3" for a
+    finding that first appeared in v4. This is the test for that fix.
+    """
+    early = make_finding("r1", "C15")
+    late = make_finding("r4", "Z9")
+
+    history = [
+        RunRecord(version=1, findings=[early]),
+        RunRecord(version=3, findings=[early]),
+        RunRecord(version=4, findings=[early, late]),
+    ]
+
+    assert first_seen(late, history) == 4
+    assert first_seen(early, history) == 1
+
+
+def test_records_out_of_order_still_give_the_earliest():
+    """Earliest version wins even if the records arrive unsorted."""
+    f1 = make_finding("r1", "C15")
+
+    history = [
+        RunRecord(version=3, findings=[f1]),
+        RunRecord(version=1, findings=[f1]),
+    ]
+
+    assert first_seen(f1, history) == 1
 
 
 def test_a_returning_finding_reports_its_first_version():
@@ -180,4 +218,10 @@ def test_a_returning_finding_reports_its_first_version():
     f1 = make_finding("r1", "C15")
     other = make_finding("r2", "C16")
 
-    assert first_seen(f1, [[f1], [other], [f1]]) == 1
+    history = [
+        RunRecord(version=1, findings=[f1]),
+        RunRecord(version=2, findings=[other]),
+        RunRecord(version=3, findings=[f1]),
+    ]
+
+    assert first_seen(f1, history) == 1
