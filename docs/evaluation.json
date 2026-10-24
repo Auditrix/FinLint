@@ -1,0 +1,123 @@
+{
+  "source": "README.md, section Results. Every number below was measured by the script named next to it.",
+  "tiers": [
+    {
+      "tier": 1,
+      "name": "Planted faults",
+      "dataset": "1,000 faults injected into the Fisy model",
+      "precision": 0.977,
+      "recall": 0.043,
+      "script": "scripts/run_tier_one.py",
+      "reading": "Almost never wrong when it speaks, but it stays quiet far too often."
+    },
+    {
+      "tier": 2,
+      "name": "Outside answer key",
+      "dataset": "70 ExceLint workbooks, 700 labelled bug cells, run untuned",
+      "precision": 0.005,
+      "recall": 0.131,
+      "true_positives": 92,
+      "false_positives": 17251,
+      "script": "finlint.eval.score.evaluate_tier_two",
+      "reading": "The honest number, and it is bad. dead_input alone produced 15,351 of the false positives.",
+      "dead_input_false_positives": 15351
+    },
+    {
+      "tier": 3,
+      "name": "Real AI generated workbooks",
+      "dataset": "498 Spreadsheet Arena workbooks, no labels exist",
+      "precision": null,
+      "recall": null,
+      "scanned": 498,
+      "failed_to_parse": 3,
+      "triggered": 268,
+      "trigger_rate": 0.538,
+      "findings_per_workbook": {
+        "median": 1,
+        "mean": 7.01,
+        "max": 146
+      },
+      "by_rule": [
+        {
+          "rule_id": "dead_input",
+          "workbooks": 134,
+          "share": 0.269
+        },
+        {
+          "rule_id": "formula_drift",
+          "workbooks": 131,
+          "share": 0.263
+        },
+        {
+          "rule_id": "error_cells",
+          "workbooks": 72,
+          "share": 0.145
+        },
+        {
+          "rule_id": "circular_reference",
+          "workbooks": 21,
+          "share": 0.042
+        },
+        {
+          "rule_id": "hardcoded_value",
+          "workbooks": 20,
+          "share": 0.04
+        },
+        {
+          "rule_id": "broken_link",
+          "workbooks": 3,
+          "share": 0.006
+        }
+      ],
+      "script": "scripts/run_tier_three.py",
+      "reading": "A median of one finding per file. Still outstanding: a hand audit of 30 sampled workbooks, so there is no false positive estimate yet."
+    }
+  ],
+  "retrieval": {
+    "questions": 50,
+    "corpus_chunks": 18806,
+    "documents": [
+      {
+        "k": 1,
+        "hits": 39
+      },
+      {
+        "k": 5,
+        "hits": 47
+      },
+      {
+        "k": 10,
+        "hits": 47
+      }
+    ],
+    "passages": [
+      {
+        "k": 1,
+        "hits": 28
+      },
+      {
+        "k": 5,
+        "hits": 35
+      },
+      {
+        "k": 10,
+        "hits": 41
+      }
+    ],
+    "script": "scripts/evaluate_retrieval.py",
+    "caveat": "A known passage test: the questions were written from passages already read, so it measures whether search works, not blind performance."
+  },
+  "comparison": [
+    {
+      "label": "CUSTODES precision, measured in the ExceLint paper",
+      "value": 0.203
+    },
+    {
+      "label": "Published spreadsheet auditors, false positive rate",
+      "range": [
+        0.78,
+        0.9
+      ]
+    }
+  ]
+}
