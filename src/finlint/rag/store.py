@@ -32,9 +32,14 @@ def _model():
         cached_model = SentenceTransformer(EMBEDDING_MODEL)
     return cached_model
 
+# Seconds to wait for PostgreSQL before giving up. Without it a connection to a
+# stopped database waited over four minutes before failing, measured on this
+# machine, and every API request would have hung that long.
+CONNECT_TIMEOUT = 5
+
 def connect():
     url=DATABASE_URL
-    conn=psycopg.connect(url)
+    conn=psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT)
     register_vector(conn)
     return conn
 
