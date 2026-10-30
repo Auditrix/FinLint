@@ -50,10 +50,13 @@ RUN mkdir -p src/finlint && touch src/finlint/__init__.py README.md \
 # without the internet and the first search is not a download.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
 
-# Our own code last, over the empty stand in. No downloads, so this takes seconds.
-COPY README.md ./
+# Our own code last. It is not installed, only copied, and Python finds it
+# through PYTHONPATH. "pip install ." here looked harmless but downloads
+# setuptools and wheel first, so a dropped connection failed the build at the
+# very last step. This way the code step needs no internet at all.
+RUN pip uninstall --yes finlint
 COPY src ./src
-RUN pip install --no-deps --force-reinstall . && rm -rf build src/*.egg-info
+ENV PYTHONPATH=/app/src
 
 COPY docs/evaluation.json docs/evaluation.json
 COPY scripts/create_user.py scripts/create_user.py
