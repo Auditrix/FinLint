@@ -1,0 +1,30 @@
+# Runs FinLint at http://localhost:8000.
+#
+#   docker compose up --build
+#
+# The database is the finlint-pg container we already run (pgvector/pgvector:
+# pg17 on port 5432, holding the ingested corpus). This file adds only the app
+# and points it at that container through the host, so the corpus is not
+# ingested twice and two PostgreSQL servers never share one data volume.
+
+services:
+  app:
+    build: .
+    image: finlint:latest
+    ports:
+      - "8000:8000"
+    # GROQ_API_KEY and the rest come from .env at run time. Never in the image.
+    env_file: .env
+    environment:
+      # Overrides the localhost address in .env: inside the container,
+      # localhost is the container itself, not this machine.
+      DATABASE_URL: postgresql://finlint:finlint@host.docker.internal:5432/finlint
+    extra_hosts:
+      # Docker Desktop provides host.docker.internal already; this line adds it
+      # on Linux as well.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # The same folder the local API and the sample exporter use, so every
+      # stored version is visible inside and outside the container.
+      - ./data/uploads:/app/data/uploads
+    restart: unless-stopped

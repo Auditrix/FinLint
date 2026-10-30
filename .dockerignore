@@ -1,0 +1,35 @@
+# Only what the Dockerfile copies is needed. Everything else stays out, so the
+# build is fast and no secret or dataset ends up inside an image.
+
+.git
+.github
+.claude
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+
+# Secrets. Passed in at run time through env_file, never baked in.
+.env
+.env.*
+
+# Datasets and uploads: gigabytes, and uploads are mounted as a volume.
+data
+splits
+notebooks
+demo
+docker
+*.xlsx
+
+# Website build output and dependencies, rebuilt inside the image.
+web/node_modules
+web/.next
+web/out
+web/tsconfig.tsbuildinfo
+web/.env.development
+
+tests
+
+# Packaging leftovers from a local pip install.
+build
+src/*.egg-info

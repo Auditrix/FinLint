@@ -152,7 +152,7 @@ Run the tests:
 pytest -q
 ```
 
-188 tests pass, 3 skip when offline.
+277 tests pass with PostgreSQL running. The ones that need the database skip without it.
 
 Run the evaluations:
 
@@ -160,6 +160,34 @@ Run the evaluations:
 python scripts/run_tier_one.py
 python scripts/run_tier_three.py
 ```
+
+### The web product
+
+FinLint runs as one web app: the API and the website on one port. It needs PostgreSQL with pgvector on port 5432, with the reference corpus loaded. Once:
+
+```bash
+docker run -d --name finlint-pg -e POSTGRES_USER=finlint -e POSTGRES_PASSWORD=finlint -e POSTGRES_DB=finlint -p 5432:5432 -v finlint_pgdata:/var/lib/postgresql/data pgvector/pgvector:pg17
+python scripts/ingest_corpus.py
+```
+
+After that, `docker start finlint-pg` is enough.
+
+With Docker, one command builds and starts everything:
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:8000. Upload a workbook, open a finding, ask for a supporting standard, and record a decision. `GROQ_API_KEY` in `.env` switches on the standards agent; without it every deterministic check still works.
+
+Without Docker, run the API and the website separately:
+
+```bash
+uvicorn finlint.api.main:app --app-dir src --port 8000
+npm --prefix web run dev
+```
+
+and open http://localhost:3000. If the API is not running, the website shows a saved real run instead, with a banner saying so. Every endpoint is listed, with a form to try it, at http://localhost:8000/docs.
 
 Open the Week 1 dashboard:
 
@@ -173,7 +201,7 @@ streamlit run src/finlint/ui/app.py
 
 Being clear about this matters more than padding the list above.
 
-- **No web backend, database or deployment.** The `api`, `db` and `lineage` packages are empty. Version history and the permanent audit record are designed but not implemented, which means one of the seven product objectives is unmet.
+- **No public deployment.** FinLint runs as a Docker container on one machine. It is not hosted at a public address, and it has no login or rate limiting, so it should not be exposed to the internet as it is.
 - **No two agent versus four agent experiment.** This was planned as the headline comparison and was cut for time. We have the reasoning for the two agent design, and the measurements that would have settled it do not exist.
 - **No false positive estimate for Tier 3.** The sample is generated and waiting to be marked by hand.
 - **The supervised model cutoff is untuned**, as described above.
