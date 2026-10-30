@@ -20,6 +20,7 @@ import json
 import shutil
 from pathlib import Path
 
+from finlint import storage
 from finlint.api.views import (
     approvals_body,
     files_body,
@@ -83,8 +84,11 @@ def main():
             cur.execute(statement)
     conn.commit()
 
-    name = WORKBOOK.name
-    result = check_file(str(WORKBOOK))
+    # Checked from its stored copy, exactly as an upload is, so the live API
+    # can open this version again for the inspector and the size figures.
+    stored = storage.store(WORKBOOK.read_bytes(), WORKBOOK.name)
+    name = stored.name
+    result = check_file(str(stored))
 
     # This run is always stored, so the latest version IS what the current code
     # found. Reusing older stored runs made run.json describe old rules while
@@ -94,7 +98,7 @@ def main():
     if len(load_history(conn, name)) < 2:
         save_run(conn, result)
 
-    workbook = read_workbook(str(WORKBOOK))
+    workbook = read_workbook(str(stored))
     graph = build_graph(workbook)
 
     run = run_body(conn, name, workbook, graph)

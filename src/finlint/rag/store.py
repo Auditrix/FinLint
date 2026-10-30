@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import datetime,timezone
 from dotenv import load_dotenv
 import psycopg
@@ -12,6 +13,7 @@ load_dotenv()
 DATABASE_URL=os.getenv("DATABASE_URL")
 
 cached_model=None
+_model_lock=threading.Lock()
 
 # Prepended to a search question, never to a stored passage. See search().
 QUERY_PREFIX="Represent this sentence for searching relevant passages: "
@@ -23,13 +25,16 @@ SCHEMA=[
 
 def _model():
     global cached_model
-    if cached_model is None:
-        # Imported here, not at the top of the file. sentence_transformers
-        # pulls in torch, which takes about 40 seconds to import, and the
-        # tests that only check text handling never need it. Same reason
-        # chunk.py loads its tokenizer lazily.
-        from sentence_transformers import SentenceTransformer
-        cached_model = SentenceTransformer(EMBEDDING_MODEL)
+    # The lock matters in the API: its startup warm up and a first request can
+    # both get here at once, and without it each would load its own copy.
+    with _model_lock:
+        if cached_model is None:
+            # Imported here, not at the top of the file. sentence_transformers
+            # pulls in torch, which takes about 40 seconds to import, and the
+            # tests that only check text handling never need it. Same reason
+            # chunk.py loads its tokenizer lazily.
+            from sentence_transformers import SentenceTransformer
+            cached_model = SentenceTransformer(EMBEDDING_MODEL)
     return cached_model
 
 # Seconds to wait for PostgreSQL before giving up. Without it a connection to a
@@ -39,8 +44,16 @@ CONNECT_TIMEOUT = 5
 
 def connect():
     url=DATABASE_URL
+    if not url:
+        # psycopg.connect(None) fails with an AttributeError, which nothing
+        # upstream recognises as "the database is unreachable".
+        raise psycopg.OperationalError("DATABASE_URL is not set")
     conn=psycopg.connect(url, connect_timeout=CONNECT_TIMEOUT)
-    register_vector(conn)
+    try:
+        register_vector(conn)
+    except Exception:
+        conn.close()  # a failed setup must not leave the connection open
+        raise
     return conn
 
 def embed(texts: list[str]):

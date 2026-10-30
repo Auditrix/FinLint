@@ -26,7 +26,10 @@ import type {
 import { cellRef } from "./utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
-const HEALTH_TIMEOUT_MS = 1500;
+// Generous on purpose. On Windows a refused connection takes about two seconds
+// (measured), and "localhost" can try IPv6 first and fall back to IPv4, so a
+// shorter limit could switch to the sample while the real API was up.
+const HEALTH_TIMEOUT_MS = 4000;
 
 export class ApiError extends Error {
   constructor(
