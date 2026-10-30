@@ -241,6 +241,7 @@ def test_history_keeps_findings_worst_first(conn, temp_workbook):
     assert [f.coordinate for f in stored] == [f.coordinate for f in ranked]
 
 
+@needs_db
 def test_unknown_file_has_no_history(conn):
     """A file never checked returns an empty list, not an error."""
     assert load_history(conn, "zz_never_seen.xlsx") == []
