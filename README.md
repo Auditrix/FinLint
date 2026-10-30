@@ -152,7 +152,7 @@ Run the tests:
 pytest -q
 ```
 
-277 tests pass with PostgreSQL running. The ones that need the database skip without it.
+329 tests pass with PostgreSQL running. The ones that need the database skip without it.
 
 Run the evaluations:
 
@@ -178,7 +178,13 @@ With Docker, one command builds and starts everything:
 docker compose up --build
 ```
 
-Then open http://localhost:8000. Upload a workbook, open a finding, ask for a supporting standard, and record a decision. `GROQ_API_KEY` in `.env` switches on the standards agent; without it every deterministic check still works.
+Create an account before the first sign in (it asks for the password):
+
+```bash
+docker compose exec app python scripts/create_user.py nara --role reviewer
+```
+
+Roles: `analyst` uploads and reads, `reviewer` also marks findings as intentional, `signer` only reads. There is no sign up page; whoever runs FinLint creates accounts. Then open http://localhost:8000, sign in, upload a workbook, open a finding, ask for a supporting standard, and record a decision. `GROQ_API_KEY` in `.env` switches on the standards agent; without it every deterministic check still works.
 
 Without Docker, run the API and the website separately:
 
@@ -187,7 +193,7 @@ uvicorn finlint.api.main:app --app-dir src --port 8000
 npm --prefix web run dev
 ```
 
-and open http://localhost:3000. If the API is not running, the website shows a saved real run instead, with a banner saying so. Every endpoint is listed, with a form to try it, at http://localhost:8000/docs.
+and open http://localhost:3000. Create accounts with `python scripts/create_user.py <name> --role reviewer`. If the API is not running, the website shows a saved real run instead, with a banner saying so. Every endpoint is listed, with a form to try it, at http://localhost:8000/docs.
 
 Open the Week 1 dashboard:
 
@@ -201,7 +207,7 @@ streamlit run src/finlint/ui/app.py
 
 Being clear about this matters more than padding the list above.
 
-- **No public deployment.** FinLint runs as a Docker container on one machine. It is not hosted at a public address, and it has no login or rate limiting, so it should not be exposed to the internet as it is.
+- **No public deployment.** FinLint runs as a Docker container on one machine and is not hosted at a public address. It has accounts, roles and rate limits, but the limits are kept in memory, so they reset on restart and would not be shared between several containers. It also needs HTTPS in front of it before going on the internet, so the session cookie is sent securely.
 - **No two agent versus four agent experiment.** This was planned as the headline comparison and was cut for time. We have the reasoning for the two agent design, and the measurements that would have settled it do not exist.
 - **No false positive estimate for Tier 3.** The sample is generated and waiting to be marked by hand.
 - **The supervised model cutoff is untuned**, as described above.

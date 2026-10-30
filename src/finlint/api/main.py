@@ -11,6 +11,10 @@ Run it from the repository root:
 Then http://localhost:8000 is the whole product, and http://localhost:8000/docs
 lists every endpoint with a form to try it.
 
+Everything except /api/health and signing in needs an account. Roles and what
+each may do are defined in finlint/auth.py; the limits on how often anyone can
+call are defined below and enforced by finlint/ratelimit.py.
+
 Every route is a plain def, not async def. Reading a workbook and talking to
 PostgreSQL both block, and FastAPI runs a plain def on a worker thread, while a
 blocking async def would freeze the server for every other user.
@@ -20,20 +24,22 @@ import collections
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import psycopg
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from finlint import storage
+from finlint import auth, storage
 from finlint.api import views
 from finlint.db.store import SCHEMA, approve, save_run
 from finlint.graph.build import build_graph
@@ -41,6 +47,7 @@ from finlint.parsing.reader import read_workbook
 from finlint.pipeline import check_file
 from finlint.rag.store import CONNECT_TIMEOUT, DATABASE_URL, connect
 from finlint.rag.store import SCHEMA as RAG_SCHEMA
+from finlint.ratelimit import RateLimiter
 from finlint.rules.model import Finding
 
 VERSION = "0.1.0"
@@ -55,9 +62,17 @@ EVALUATION = Path(os.getenv("FINLINT_EVALUATION", "docs/evaluation.json"))
 # The model the Standards agent asks. Overridable without a code change.
 MODEL = os.getenv("FINLINT_MODEL", "qwen/qwen3.8-27b")
 
-# The web page during development. In production it is served from this same
-# origin, so no cross-origin rule is needed.
-DEV_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+# Other origins allowed to call the API with the session cookie: only the
+# development page on port 3000. The container sets this empty, because there
+# the page and the API share one origin and nothing else should be let in.
+# Not 127.0.0.1:3000: the browser treats it as another site from localhost and
+# drops the cookie, so signing in silently failed there (found in review).
+DEV_ORIGINS = [o for o in os.getenv("FINLINT_CORS_ORIGINS", "http://localhost:3000").split(",") if o]
+
+# Largest request body accepted. An upload may be a workbook plus the form
+# wrapper around it; anything else is a small JSON body.
+UPLOAD_BODY_LIMIT = storage.MAX_BYTES + 1024 * 1024
+BODY_LIMIT = 64 * 1024
 
 # The longest /api/health waits for the database before calling it off.
 HEALTH_PROBE_SECONDS = 1.0
@@ -65,6 +80,21 @@ HEALTH_PROBE_SECONDS = 1.0
 # How many parsed workbooks to keep in memory. Reading one takes about a second
 # for a large model, and the inspector asks about one cell at a time.
 WORKBOOK_CACHE = 8
+
+# The cookie that carries a signed in session. HttpOnly, so the page's own
+# scripts cannot read it and an injected script cannot steal it.
+SESSION_COOKIE = "finlint_session"
+
+# Rate limits, as (requests, seconds). See finlint/ratelimit.py for why.
+API_LIMIT = (240, 60)            # any /api call, per address
+LOGIN_FAILURES = (5, 15 * 60)    # wrong passwords for one name, per address
+LOGIN_FAILURES_PER_ADDRESS = (20, 15 * 60)
+UPLOAD_LIMIT = (10, 60)          # workbooks checked, per person
+EXPLAIN_LIMIT = (6, 60)          # standards questions, per person
+EXPLAIN_LIMIT_SERVER = (10, 60)  # for everyone together: Groq allows 30 calls
+                                 # a minute and one question uses up to three
+
+limiter = RateLimiter()
 
 log = logging.getLogger("finlint.api")
 
@@ -109,12 +139,65 @@ def warm_up():
 
 app = FastAPI(title="FinLint", version=VERSION, lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=DEV_ORIGINS,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
-)
+
+def client_address(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def refuse(status: int, detail: str, headers: dict | None = None) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"detail": detail}, headers=headers)
+
+
+def same_site_origin(request: Request) -> bool:
+    """True when a POST comes from this site or an allowed development page.
+
+    Browsers always send Origin on a cross site POST. Refusing a foreign one
+    stops another site (or another program on another localhost port) from
+    using a signed in person's cookie to act for them. Tools that send no
+    Origin, such as curl, are not a browser carrying someone's cookie.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    return origin in DEV_ORIGINS or urlsplit(origin).netloc == request.headers.get("host")
+
+
+@app.middleware("http")
+async def guard_requests(request: Request, call_next):
+    """Cheap refusals that must happen before a request body is read.
+
+    FastAPI reads and parses the whole body before any route dependency runs,
+    so without this an anonymous caller could make the server receive a
+    400 MB upload before being told to sign in (found in review: 38 seconds).
+
+    Also a generous ceiling on API calls from one address: one click on the
+    page makes a handful of calls, so this stops a script, not a person.
+    """
+    path = request.url.path
+    if not path.startswith("/api") or request.method == "OPTIONS":
+        return await call_next(request)
+
+    wait = limiter.hit(f"api:{client_address(request)}", *API_LIMIT)
+    if wait:
+        seconds = math.ceil(wait)
+        return refuse(429, f"Too many requests from this address. Try again in {seconds} seconds.",
+                      {"Retry-After": str(seconds)})
+
+    if request.method == "POST":
+        if not same_site_origin(request):
+            return refuse(403, "This request came from another website and was refused.")
+        size = request.headers.get("content-length")
+        if path == "/api/check":
+            if SESSION_COOKIE not in request.cookies:
+                return refuse(401, "Sign in to use FinLint.")
+            if size is None:
+                return refuse(411, "The upload must say its size.")
+        upload = path == "/api/check"
+        limit = UPLOAD_BODY_LIMIT if upload else BODY_LIMIT
+        if size is not None and (not size.isdigit() or int(size) > limit):
+            return refuse(413, f"The workbook is larger than {storage.MAX_BYTES // (1024 * 1024)} MB."
+                          if upload else "The request is too large.")
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -137,6 +220,17 @@ async def log_requests(request: Request, call_next):
             log.info("%s %s %s %.0fms", request.method, request.url.path, status, elapsed)
 
 
+# Added last, so it wraps everything above. Credentials are allowed so the
+# development page on port 3000 can send its session cookie to port 8000.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=DEV_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
+
+
 _schema_ready = False
 _schema_lock = threading.Lock()
 
@@ -154,7 +248,7 @@ def ensure_schema():
         if not DATABASE_URL:
             raise psycopg.OperationalError("DATABASE_URL is not set")
         with psycopg.connect(DATABASE_URL, connect_timeout=CONNECT_TIMEOUT) as conn:
-            for statement in RAG_SCHEMA + SCHEMA:
+            for statement in RAG_SCHEMA + SCHEMA + auth.SCHEMA:
                 conn.execute(statement)
         _schema_ready = True
 
@@ -247,6 +341,32 @@ def parsed(sha256: str, name: str):
     return value
 
 
+def current_user(request: Request, conn=Depends(db)) -> auth.User:
+    """The person signed in, or 401. Every data route depends on this."""
+    user = auth.user_for_token(conn, request.cookies.get(SESSION_COOKIE))
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in to use FinLint.")
+    return user
+
+
+def allowed(roles: tuple[str, ...], action: str):
+    """A dependency that lets only these roles through, with a reason if not."""
+    def check(user: auth.User = Depends(current_user)) -> auth.User:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your account is a {user.role}, and a {user.role} cannot {action}.",
+            )
+        return user
+    return check
+
+
+def too_many(wait: float, message: str) -> HTTPException:
+    seconds = math.ceil(wait)
+    return HTTPException(status_code=429, detail=f"{message} Try again in {seconds} seconds.",
+                         headers={"Retry-After": str(seconds)})
+
+
 def latest_sha(conn, name: str) -> str:
     """The hash of the newest stored version of a workbook."""
     with conn.cursor() as cur:
@@ -292,19 +412,93 @@ def health():
             "llm": bool(os.getenv("GROQ_API_KEY")), "version": VERSION}
 
 
+# --- signing in ---------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    # Capped, because every name tried is a key in the rate limiter's memory.
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=1024)
+
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest, request: Request, response: Response, conn=Depends(db)):
+    """Check a name and password, and start a session in a cookie.
+
+    Every attempt is counted BEFORE the password is checked, in one locked
+    step, and a correct one is then taken back. Counting only after a failure
+    let a burst of simultaneous guesses all pass the check first. The same
+    message is given for a wrong name and a wrong password, so the page does
+    not reveal which names exist.
+    """
+    name = auth.normalise(body.username)
+    address = client_address(request)
+    per_name, per_address = f"login:{address}:{name}", f"login:{address}"
+    wait = limiter.hit_all([(per_name, *LOGIN_FAILURES), (per_address, *LOGIN_FAILURES_PER_ADDRESS)])
+    if wait:
+        raise too_many(wait, "Too many wrong passwords.")
+
+    user = auth.authenticate(conn, name, body.password)
+    if user is None:
+        log.warning("failed sign in for %r from %s", name, address)
+        raise HTTPException(status_code=401, detail="That username and password do not match an account.")
+
+    # A correct password is not a failure: give both counts back.
+    limiter.clear(per_name)
+    limiter.undo(per_address)
+    response.set_cookie(
+        SESSION_COOKIE,
+        auth.start_session(conn, user),
+        max_age=auth.SESSION_HOURS * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    log.info("%s signed in as %s", user.username, user.role)
+    return user.public()
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response, conn=Depends(db)):
+    auth.end_session(conn, request.cookies.get(SESSION_COOKIE))
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me(request: Request, conn=Depends(db)):
+    """Who is signed in, and what they may do. 401 if nobody."""
+    user = auth.user_for_token(conn, request.cookies.get(SESSION_COOKIE))
+    if user is None:
+        if not auth.has_users(conn):
+            raise HTTPException(
+                status_code=401,
+                detail="No accounts exist yet. Create one with: python scripts/create_user.py <name> --role reviewer",
+            )
+        raise HTTPException(status_code=401, detail="Sign in to use FinLint.")
+    return user.public()
+
+
+# --- workbooks ---------------------------------------------------------------
+
 @app.get("/api/files")
-def files(conn=Depends(db)):
+def files(conn=Depends(db), _user=Depends(current_user)):
     return views.files_body(conn)
 
 
 @app.post("/api/check")
-def check(file: UploadFile = File(...), conn=Depends(db)):
+def check(file: UploadFile = File(...), conn=Depends(db),
+          user: auth.User = Depends(allowed(auth.CAN_UPLOAD, "upload workbooks"))):
     """Store an uploaded workbook, run every check on it, save it as a version.
 
     Only the deterministic engine runs here: no model, so the same file always
     gets the same findings and the same score. Citations are asked for one
     finding at a time, through /api/explain.
     """
+    wait = limiter.hit(f"upload:{user.id}", *UPLOAD_LIMIT)
+    if wait:
+        raise too_many(wait, f"You have checked {UPLOAD_LIMIT[0]} workbooks in the last minute.")
+
     # Read one byte past the limit, so an oversized file is caught without
     # pulling all of it into memory.
     data = file.file.read(storage.MAX_BYTES + 1)
@@ -331,17 +525,17 @@ def check(file: UploadFile = File(...), conn=Depends(db)):
 
 
 @app.get("/api/files/{name}/run")
-def run(name: str, conn=Depends(db)):
+def run(name: str, conn=Depends(db), _user=Depends(current_user)):
     return run_detail(conn, name)
 
 
 @app.get("/api/files/{name}/history")
-def history(name: str, conn=Depends(db)):
+def history(name: str, conn=Depends(db), _user=Depends(current_user)):
     return views.history_body(conn, name)
 
 
 @app.get("/api/files/{name}/cell")
-def cell(name: str, ref: str, conn=Depends(db)):
+def cell(name: str, ref: str, conn=Depends(db), _user=Depends(current_user)):
     """Everything the inspector shows for one cell, given as Sheet!A1."""
     sheet, separator, coordinate = ref.rpartition("!")
     if not separator or not sheet or not coordinate:
@@ -356,7 +550,7 @@ class ExplainRequest(BaseModel):
 
 
 @app.post("/api/explain")
-def explain(body: ExplainRequest, conn=Depends(db)):
+def explain(body: ExplainRequest, conn=Depends(db), user: auth.User = Depends(current_user)):
     """Ask the Standards agent about one finding.
 
     One finding per call on purpose: each costs one to three Groq calls, and the
@@ -369,6 +563,17 @@ def explain(body: ExplainRequest, conn=Depends(db)):
             status_code=503,
             detail="The standards agent is off: set GROQ_API_KEY on the server to enable it.",
         )
+    # Both limits are checked and counted together in one locked step, so a
+    # question refused by either does not use up the other.
+    mine, everyone = f"explain:{user.id}", "explain:server"
+    if limiter.wait_needed(mine, *EXPLAIN_LIMIT):
+        message = f"You have asked {EXPLAIN_LIMIT[0]} standards questions in the last minute."
+    else:
+        message = "The standards agent is busy with other people's questions."
+    wait = limiter.hit_all([(mine, *EXPLAIN_LIMIT), (everyone, *EXPLAIN_LIMIT_SERVER)])
+    if wait:
+        raise too_many(wait, message)
+
     from finlint.agents.groq_provider import groq_completion
     from finlint.agents.standards import explain_with_retriever
 
@@ -387,7 +592,7 @@ def explain(body: ExplainRequest, conn=Depends(db)):
 
 
 @app.get("/api/files/{name}/approvals")
-def approvals(name: str, conn=Depends(db)):
+def approvals(name: str, conn=Depends(db), _user=Depends(current_user)):
     return views.approvals_body(conn, name)
 
 
@@ -395,20 +600,25 @@ class ApprovalRequest(BaseModel):
     file: str
     finding: Finding
     reason: str
-    who: str
+    # Ignored, kept so older clients still validate. Who decided is always the
+    # account signed in: a typed name let anyone record a decision as anyone.
+    who: str | None = None
 
 
 @app.post("/api/approvals")
-def record_approval(body: ApprovalRequest, conn=Depends(db)):
+def record_approval(body: ApprovalRequest, conn=Depends(db),
+                    user: auth.User = Depends(allowed(auth.CAN_DECIDE, "mark findings as intentional"))):
     """Record that a person decided a finding is deliberate, and why.
 
+    Only a reviewer may: the analyst who built the model must not sign off its
+    own findings (segregation of duties). The decider is the account signed in.
+
     db.store.approve refuses an unknown file, a finding that was never
-    reported, and a blank reason or name. Each refusal is a sentence the page
-    shows as it is.
+    reported, and a blank reason. Each refusal is a sentence the page shows as
+    it is.
     """
-    reason, who = body.reason.strip(), body.who.strip()
     try:
-        approve(conn, body.file, body.finding, reason, who)
+        approve(conn, body.file, body.finding, body.reason.strip(), user.username)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -419,7 +629,7 @@ def record_approval(body: ApprovalRequest, conn=Depends(db)):
 
 
 @app.get("/api/evaluation")
-def evaluation():
+def evaluation(_user=Depends(current_user)):
     if not EVALUATION.exists():
         raise views.NotFound("The evaluation results file is missing.")
     return json.loads(EVALUATION.read_text(encoding="utf-8"))

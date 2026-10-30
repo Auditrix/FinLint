@@ -22,6 +22,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_RETRIES=10 \
+    PIP_TIMEOUT=60 \
     HF_HOME=/opt/hf
 WORKDIR /app
 
@@ -29,15 +31,32 @@ WORKDIR /app
 # gigabytes this container would never use (Section 5: no GPU in hosting).
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-COPY pyproject.toml README.md ./
-COPY src ./src
-RUN pip install . && rm -rf build src/*.egg-info
+# Every dependency, in its own layer, BEFORE any of our code is copied. Docker
+# reuses a layer until something it copied changes, so an edit to src/ never
+# downloads these again. With the code copied first, every small change meant
+# 155 fresh downloads, and one dropped connection threw the whole attempt away.
+# An empty package stands in for ours, because pyproject.toml needs one to build.
+# The cache keeps finished downloads between attempts, then is deleted.
+COPY pyproject.toml ./
+RUN mkdir -p src/finlint && touch src/finlint/__init__.py README.md \
+    && for attempt in 1 2 3 4 5; do \
+         env -u PIP_NO_CACHE_DIR pip install --cache-dir /tmp/pip-cache . && break; \
+         [ "$attempt" = 5 ] && exit 1; \
+         echo "pip attempt $attempt failed, trying again"; sleep 10; \
+       done \
+    && rm -rf /tmp/pip-cache build src README.md
 
 # The embedding model is downloaded once, here, so the container starts
 # without the internet and the first search is not a download.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
 
+# Our own code last, over the empty stand in. No downloads, so this takes seconds.
+COPY README.md ./
+COPY src ./src
+RUN pip install --no-deps --force-reinstall . && rm -rf build src/*.egg-info
+
 COPY docs/evaluation.json docs/evaluation.json
+COPY scripts/create_user.py scripts/create_user.py
 COPY --from=web /web/out web/out
 
 # Never run as root. The uploads folder is the only place it writes.
@@ -46,13 +65,20 @@ RUN useradd --create-home --uid 1000 finlint \
     && chown -R finlint data
 USER finlint
 
+# FINLINT_CORS_ORIGINS is empty: the page and the API share this origin, so no
+# other site is allowed to call the API with someone's session cookie.
 ENV FINLINT_UPLOADS=/app/data/uploads \
     FINLINT_WEB=/app/web/out \
     FINLINT_EVALUATION=/app/docs/evaluation.json \
+    FINLINT_CORS_ORIGINS="" \
     HF_HUB_OFFLINE=1
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"
 
-CMD ["uvicorn", "finlint.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-proxy-headers: the rate limits key on the caller's address, and an
+# X-Forwarded-For header is just text anyone can send. Behind a real proxy,
+# replace it with --forwarded-allow-ips <that proxy's address>, or every user
+# shares the proxy's address and therefore one set of limits.
+CMD ["uvicorn", "finlint.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

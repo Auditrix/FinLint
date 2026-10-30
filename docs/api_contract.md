@@ -37,6 +37,14 @@ on import with a message about form data.
   become ISO strings.
 - **Errors** return a non 2xx status with `{"detail": "plain words"}`. The
   frontend shows `detail` to the user, so write it for a person.
+- **Signing in.** Every endpoint except `GET /api/health` and
+  `POST /api/auth/login` needs the `finlint_session` cookie. Without it the
+  answer is `401`. A role that may not do something gets `403` with the
+  reason. The frontend sends the cookie with `credentials: "include"`.
+- **Rate limits** answer `429` with a `Retry-After` header in seconds and a
+  `detail` saying how long to wait. The limits are listed in `api/main.py`.
+- **Roles** (`finlint/auth.py`): `analyst` uploads and reads; `reviewer`
+  also marks findings as intentional; `signer` only reads.
 
 ---
 
@@ -73,6 +81,32 @@ is no key rather than letting them fail.
 `llm` is true when `GROQ_API_KEY` is set. `database` is true when `connect()`
 succeeds.
 
+### `POST /api/auth/login`
+
+```json
+{ "username": "nara", "password": "..." }
+```
+
+Sets the session cookie (HttpOnly, SameSite=Lax, 12 hours) and returns the
+`Account`:
+
+```json
+{ "username": "nara", "role": "reviewer", "can_upload": true, "can_decide": true }
+```
+
+A wrong name and a wrong password get the same `401`, so the answer does not
+reveal which names exist. Five wrong passwords for one name from one address
+in 15 minutes gives `429`.
+
+### `POST /api/auth/logout`
+
+Deletes the session on the server and clears the cookie. `{"ok": true}`.
+
+### `GET /api/auth/me`
+
+The `Account` signed in, or `401`. When no account exists at all, the `401`
+detail says how to create one.
+
 ### `GET /api/files`
 
 Every workbook ever checked, newest first.
@@ -90,6 +124,8 @@ Every workbook ever checked, newest first.
 ```
 
 ### `POST /api/check`
+
+Analysts and reviewers only. Ten per minute per person.
 
 `multipart/form-data` with one field, `file`, the `.xlsx`.
 
@@ -255,11 +291,13 @@ Mark a finding as intentional.
 
 ```json
 { "file": "Financial_Models.xlsx", "finding": Finding,
-  "reason": "Deliberate, locked by policy", "who": "nara" }
+  "reason": "Deliberate, locked by policy" }
 ```
 
-Call `db.store.approve`. It already refuses an unknown file, a finding that
-was never reported, and a blank reason or decider, all with `ValueError`.
+Reviewers only (`403` otherwise). The decider is always the account signed
+in; a `who` field, if sent, is ignored, so nobody can record a decision under
+another name. Call `db.store.approve`. It already refuses an unknown file, a
+finding that was never reported, and a blank reason, all with `ValueError`.
 Turn that into a 400 and pass the message through as `detail`. Return the
 stored `Approval`.
 
