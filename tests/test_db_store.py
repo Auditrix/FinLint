@@ -230,6 +230,17 @@ def test_history_round_trips_through_diff_runs(conn, temp_workbook):
 
 
 @needs_db
+def test_history_keeps_findings_worst_first(conn, temp_workbook):
+    """save_run inserts them ranked, and the page promises worst first."""
+    ranked = [make_finding(coordinate=f"A{n}") for n in range(1, 40)]
+    file_id = _make_file(conn, Path(temp_workbook).name)
+    _insert_run(conn, file_id, 1, ranked)
+
+    stored = load_history(conn, Path(temp_workbook).name)[-1].findings
+
+    assert [f.coordinate for f in stored] == [f.coordinate for f in ranked]
+
+
 def test_unknown_file_has_no_history(conn):
     """A file never checked returns an empty list, not an error."""
     assert load_history(conn, "zz_never_seen.xlsx") == []

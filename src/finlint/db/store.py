@@ -181,6 +181,10 @@ def load_history(conn, name) -> list[RunRecord]:
     ordering within equal values, so one run's rows could interleave with
     another's and the grouping below would make extra records.
 
+    Ordered by finding id last, because findings are inserted worst first and
+    SQL gives no order within a run otherwise. Without it the page that says
+    "worst first" showed a low finding above the critical ones.
+
     A LEFT JOIN rather than a JOIN, because a plain JOIN drops any run that
     found nothing, and a missing run is a missing version in the history.
     """
@@ -190,7 +194,7 @@ def load_history(conn, name) -> list[RunRecord]:
             "FROM runs r "
             "LEFT JOIN findings f ON f.run_id=r.id "
             "WHERE r.file_id=(SELECT id FROM files WHERE name=%s) "
-            "ORDER BY r.version, r.id ",(name,)
+            "ORDER BY r.version, r.id, f.id ",(name,)
         )
 
         history=[]
