@@ -38,7 +38,7 @@ The ladder exists to stop us fooling ourselves. Tier 1 uses faults we planted, s
 
 We are reporting it anyway. Two honest numbers beat one inflated number, and a project that only shows Tier 1 has proved nothing. For comparison, the ExceLint paper measured the CUSTODES tool at 20.3 percent precision, and published spreadsheet auditors generally run at 78 to 90 percent false positives. We are well below even that bar.
 
-**Where the Tier 2 damage comes from.** One rule, `dead_input`, produced 15,351 of the false positives on its own. We added filters, which removed only 411 of them. The rule is finding real dead inputs that the ExceLint answer key simply does not consider bugs. That is a definition mismatch as much as a detector fault, and separating the two is unfinished work.
+**Where the Tier 2 damage comes from.** One rule, `dead_input`, produced 14,940 of the 17,251 false positives on its own, even after filters that removed only 411 of them. The rule is finding real dead inputs that the ExceLint answer key simply does not consider bugs. That is a definition mismatch as much as a detector fault, and separating the two is unfinished work.
 
 ### Tier 3, on the real target distribution
 
@@ -80,12 +80,12 @@ A journal entry is one line in the diary of every transaction a company records.
 
 ### Retrieval
 
-The rule corpus is 18,806 chunks from ten public domain United States government documents. We wrote 50 questions where we already knew which passage should come back.
+The rule corpus is 19,994 chunks from eleven public domain United States government documents. We wrote 50 questions where we already knew which passage should come back.
 
 | Measure | Top 1 | Top 5 | Top 10 |
 |---|---|---|---|
 | Correct document returned | 39/50 (78%) | 47/50 (94%) | 47/50 (94%) |
-| Correct passage returned | 28/50 (56%) | 35/50 (70%) | 41/50 (82%) |
+| Correct passage returned | 28/50 (56%) | 34/50 (68%) | 41/50 (82%) |
 
 Honest caveat recorded with the result: the questions were written from passages we had already read in the corpus, so this is a known passage test and not a blind one. It measures whether search works, not whether it handles questions nobody anticipated.
 

@@ -19,8 +19,8 @@
       "true_positives": 92,
       "false_positives": 17251,
       "script": "finlint.eval.score.evaluate_tier_two",
-      "reading": "The honest number, and it is bad. dead_input alone produced 15,351 of the false positives.",
-      "dead_input_false_positives": 15351
+      "reading": "The honest number, and it is bad. dead_input alone produced 14,940 of the false positives.",
+      "dead_input_false_positives": 14940
     },
     {
       "tier": 3,
@@ -75,7 +75,7 @@
   ],
   "retrieval": {
     "questions": 50,
-    "corpus_chunks": 18806,
+    "corpus_chunks": 19994,
     "documents": [
       {
         "k": 1,
@@ -97,7 +97,7 @@
       },
       {
         "k": 5,
-        "hits": 35
+        "hits": 34
       },
       {
         "k": 10,
