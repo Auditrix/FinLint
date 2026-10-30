@@ -29,7 +29,7 @@ const VIEW_LABELS: { view: View; label: string }[] = [
 const MAX_MATCHES = 40;
 
 export function CommandPalette() {
-  const { paletteOpen, setPaletteOpen, run, files, select, setView, selectFile, setUploadOpen, mode } = useWorkspace();
+  const { paletteOpen, setPaletteOpen, run, files, select, setView, selectFile, setUploadOpen, mode, canUpload } = useWorkspace();
   const [query, setQuery] = React.useState("");
 
   React.useEffect(() => {
@@ -131,7 +131,7 @@ export function CommandPalette() {
                 <CommandGroup heading="Actions">
                   <CommandItem
                     value="action check"
-                    disabled={mode !== "live"}
+                    disabled={mode !== "live" || !canUpload}
                     onSelect={() => {
                       setUploadOpen(true);
                       close();
@@ -140,6 +140,9 @@ export function CommandPalette() {
                     <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.5} />
                     Check a workbook
                     {mode !== "live" && <span className="ml-auto text-2xs text-ink-muted">needs the API</span>}
+                    {mode === "live" && !canUpload && (
+                      <span className="ml-auto text-2xs text-ink-muted">not for your role</span>
+                    )}
                   </CommandItem>
                   <CommandItem value="action evaluation" onSelect={() => { setView("evaluation"); close(); }}>
                     <BookOpen className="h-4 w-4 text-ink-muted" strokeWidth={1.5} />

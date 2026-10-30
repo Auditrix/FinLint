@@ -12,6 +12,7 @@
  */
 
 import type {
+  Account,
   Approval,
   CellInspect,
   DataMode,
@@ -69,8 +70,20 @@ async function fixture<T>(name: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+// Called when the API says the session is gone (expired, or signed out in
+// another tab), so the workspace can show the sign in screen instead of a
+// row of errors.
+let onSignedOut: (() => void) | null = null;
+
+export function whenSignedOut(handler: (() => void) | null): void {
+  onSignedOut = handler;
+}
+
 async function live<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
+  // "include" sends the session cookie. In development the page is on port
+  // 3000 and the API on 8000, which counts as another origin.
+  const res = await fetch(`${BASE}${path}`, { ...init, credentials: "include" });
+  if (res.status === 401 && !path.startsWith("/api/auth/")) onSignedOut?.();
   if (!res.ok) {
     let detail = `The server answered ${res.status}.`;
     try {
@@ -128,6 +141,32 @@ async function sampleRunFor(file: string): Promise<RunDetail> {
 /** Every read waits for the live or sample decision before choosing a source. */
 async function ready(): Promise<DataMode> {
   return (await connect()).mode;
+}
+
+/** The account signed in, or null when nobody is. Throws on anything else. */
+export async function getAccount(): Promise<Account | null> {
+  try {
+    return await live<Account>("/api/auth/me");
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      // "No accounts exist yet" is worth showing on the sign in screen.
+      if (e.message.startsWith("No accounts")) throw e;
+      return null;
+    }
+    throw e;
+  }
+}
+
+export async function signIn(username: string, password: string): Promise<Account> {
+  return live("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function signOut(): Promise<void> {
+  await live("/api/auth/logout", { method: "POST" });
 }
 
 export async function getFiles(): Promise<FileSummary[]> {
@@ -200,6 +239,11 @@ export async function getApprovals(file: string): Promise<Approval[]> {
   );
 }
 
+/**
+ * Record a decision. In live mode the server records the account signed in as
+ * the decider, so no name is sent. The sample has no accounts, so it takes a
+ * typed name instead.
+ */
 export async function approveFinding(
   file: string,
   finding: Finding,
@@ -210,7 +254,7 @@ export async function approveFinding(
     return live("/api/approvals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file, finding, reason, who }),
+      body: JSON.stringify({ file, finding, reason }),
     });
   }
   // The same rules db.store.approve enforces, so the sample cannot teach a

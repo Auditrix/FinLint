@@ -14,6 +14,7 @@ import { CommandHeader } from "./shell/command-header";
 import { CommandPalette } from "./shell/command-palette";
 import { NavRail } from "./shell/nav-rail";
 import { SampleBanner } from "./shell/sample-banner";
+import { SignIn } from "./shell/sign-in";
 import { UploadDialog } from "./shell/upload-dialog";
 import { useWorkspace, WorkspaceProvider } from "./workspace-context";
 
@@ -24,21 +25,44 @@ export function Workspace() {
           to follow it. With "user" it drops movement and keeps simple fades. */}
       <MotionConfig reducedMotion="user">
         <TooltipProvider>
-          <div className="flex h-screen overflow-hidden">
-            <NavRail />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <CommandHeader />
-              <SampleBanner />
-              <main className="min-h-0 flex-1">
-                <ViewSwitch />
-              </main>
-            </div>
-          </div>
-          <CommandPalette />
-          <UploadDialog />
+          <Gate />
         </TooltipProvider>
       </MotionConfig>
     </WorkspaceProvider>
+  );
+}
+
+/** The sign in screen until someone is signed in; the workspace after. */
+function Gate() {
+  const { authState } = useWorkspace();
+
+  if (authState === "checking") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-canvas">
+        <Centered>
+          <Loader2 className="h-4 w-4 animate-spin text-accent" strokeWidth={1.5} />
+          Connecting to FinLint
+        </Centered>
+      </div>
+    );
+  }
+  if (authState === "needed") return <SignIn />;
+
+  return (
+    <>
+      <div className="flex h-screen overflow-hidden">
+        <NavRail />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <CommandHeader />
+          <SampleBanner />
+          <main className="min-h-0 flex-1">
+            <ViewSwitch />
+          </main>
+        </div>
+      </div>
+      <CommandPalette />
+      <UploadDialog />
+    </>
   );
 }
 

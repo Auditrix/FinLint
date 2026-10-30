@@ -23,10 +23,14 @@ const NAME_KEY = "finlint.reviewer";
  * file. The cell is never touched.
  */
 export function Decision({ file, finding }: { file: string; finding: AnnotatedFinding }) {
-  const { refresh, mode, setView } = useWorkspace();
+  const { refresh, mode, setView, account, canDecide } = useWorkspace();
   const [open, setOpen] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [who, setWho] = React.useState("");
+  // Live: the server records the account signed in. Sample: no accounts, so
+  // the name is typed, as before.
+  const live = mode === "live";
+  const decider = live ? (account?.username ?? "") : who;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   // Set the moment the decision is stored, whether or not the screen manages
@@ -73,7 +77,7 @@ export function Decision({ file, finding }: { file: string; finding: AnnotatedFi
     setBusy(true);
     setError(null);
     try {
-      await api.approveFinding(file, finding, reason, who);
+      await api.approveFinding(file, finding, reason, decider);
     } catch (err) {
       // Nothing was stored, so trying again is safe.
       setError(err instanceof Error ? err.message : "The decision was not saved.");
@@ -88,10 +92,12 @@ export function Decision({ file, finding }: { file: string; finding: AnnotatedFi
     setSaved(true);
     setOpen(false);
     setBusy(false);
-    try {
-      window.localStorage.setItem(NAME_KEY, who.trim());
-    } catch {
-      /* not essential */
+    if (!live) {
+      try {
+        window.localStorage.setItem(NAME_KEY, who.trim());
+      } catch {
+        /* not essential */
+      }
     }
     try {
       await refresh();
@@ -110,10 +116,17 @@ export function Decision({ file, finding }: { file: string; finding: AnnotatedFi
             future version.
           </span>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <UserCheck className="h-4 w-4" strokeWidth={1.5} />
-          Mark as intentional
-        </Button>
+        {canDecide ? (
+          <Button onClick={() => setOpen(true)}>
+            <UserCheck className="h-4 w-4" strokeWidth={1.5} />
+            Mark as intentional
+          </Button>
+        ) : (
+          <p className="rounded-md border border-hairline bg-canvas px-3 py-2.5 text-xs text-ink-secondary">
+            Only a reviewer can mark a finding as intentional. Whoever builds a model does not sign off its own
+            findings.
+          </p>
+        )}
       </div>
 
       <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
@@ -139,15 +152,21 @@ export function Decision({ file, finding }: { file: string; finding: AnnotatedFi
                   className="w-full resize-none rounded-md border border-hairline bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-muted focus:border-accent"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-ink">Decided by</span>
-                <input
-                  value={who}
-                  onChange={(e) => setWho(e.target.value)}
-                  placeholder="Your name"
-                  className="h-8 w-full rounded-md border border-hairline bg-surface px-3 text-[13px] text-ink placeholder:text-ink-muted focus:border-accent"
-                />
-              </label>
+              {live ? (
+                <p className="text-xs text-ink-secondary">
+                  Recorded as <span className="font-medium text-ink">{decider}</span>, with today&apos;s date.
+                </p>
+              ) : (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-ink">Decided by</span>
+                  <input
+                    value={who}
+                    onChange={(e) => setWho(e.target.value)}
+                    placeholder="Your name"
+                    className="h-8 w-full rounded-md border border-hairline bg-surface px-3 text-[13px] text-ink placeholder:text-ink-muted focus:border-accent"
+                  />
+                </label>
+              )}
               {mode === "sample" && (
                 <p className="text-xs text-ink-muted">
                   Saved sample: this decision lasts only until you reload the page, and is not written to the run history.
@@ -164,7 +183,7 @@ export function Decision({ file, finding }: { file: string; finding: AnnotatedFi
               <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={busy || !reason.trim() || !who.trim()}>
+              <Button type="submit" variant="primary" disabled={busy || !reason.trim() || !decider.trim()}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />}
                 Record decision
               </Button>

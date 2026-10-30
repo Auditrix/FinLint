@@ -7,6 +7,7 @@ import {
   FlaskConical,
   History,
   ListChecks,
+  LogOut,
   Network,
   ScrollText,
 } from "lucide-react";
@@ -42,7 +43,7 @@ const SECTIONS: { title: string; items: { view: View; label: string; icon: typeo
 const SPRING = { type: "spring", stiffness: 400, damping: 30 } as const;
 
 export function NavRail() {
-  const { view, setView, mode, health, run } = useWorkspace();
+  const { view, setView, mode, health, run, account, signOut } = useWorkspace();
   const [collapsed, setCollapsed] = React.useState(false);
 
   // Narrow windows start collapsed so the rail never takes half the screen.
@@ -132,6 +133,25 @@ export function NavRail() {
       </nav>
 
       <div className="border-t border-hairline p-2">
+        {account && (
+          <div className={cn("mb-2 flex items-center gap-2", collapsed ? "justify-center" : "px-1")}>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-ink">{account.username}</div>
+                <div className="text-2xs capitalize text-ink-muted">{account.role}</div>
+              </div>
+            )}
+            <Tip content="Sign out" side={collapsed ? "right" : "top"}>
+              <button
+                onClick={() => void signOut()}
+                aria-label="Sign out"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-slate-100 hover:text-ink"
+              >
+                <LogOut className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </Tip>
+          </div>
+        )}
         {!collapsed && (
           <div className="mb-2 space-y-1.5 rounded-md border border-hairline bg-canvas px-2.5 py-2">
             {/* A saved sample has no live database or model behind it, whatever

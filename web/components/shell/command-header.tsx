@@ -19,7 +19,8 @@ import { useWorkspace } from "../workspace-context";
 import { RulesDialog } from "./rules-dialog";
 
 export function CommandHeader() {
-  const { files, file, run, selectFile, setPaletteOpen, setUploadOpen, mode } = useWorkspace();
+  const { files, file, run, selectFile, setPaletteOpen, setUploadOpen, mode, canUpload, account } = useWorkspace();
+  const uploadable = mode === "live" && canUpload;
   const [rulesOpen, setRulesOpen] = React.useState(false);
 
   return (
@@ -49,7 +50,7 @@ export function CommandHeader() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setUploadOpen(true)} disabled={mode !== "live"}>
+            <DropdownMenuItem onSelect={() => setUploadOpen(true)} disabled={!uploadable}>
               <Upload className="h-4 w-4" strokeWidth={1.5} />
               Check another workbook
             </DropdownMenuItem>
@@ -83,15 +84,21 @@ export function CommandHeader() {
           <span className="hidden sm:inline">Rules</span>
         </Button>
         <Tip
-          content={mode === "live" ? "Upload a workbook and run every check" : "Start the API to check a new workbook"}
+          content={
+            mode !== "live"
+              ? "Start the API to check a new workbook"
+              : canUpload
+                ? "Upload a workbook and run every check"
+                : `A ${account?.role ?? "signer"} reads results but does not upload`
+          }
           side="bottom"
         >
           <span>
-            <Button variant="primary" onClick={() => setUploadOpen(true)} disabled={mode !== "live"}>
+            <Button variant="primary" onClick={() => setUploadOpen(true)} disabled={!uploadable}>
               <span
                 className={cn(
                   "h-1.5 w-1.5 rounded-full",
-                  mode === "live" ? "animate-pulse-dot bg-emerald-300" : "bg-white/50",
+                  uploadable ? "animate-pulse-dot bg-emerald-300" : "bg-white/50",
                 )}
                 aria-hidden
               />

@@ -144,6 +144,18 @@ export interface Approval {
 }
 
 /** GET /api/health */
+/** auth.User.public(): GET /api/auth/me and POST /api/auth/login. */
+export type Role = "analyst" | "reviewer" | "signer";
+
+export interface Account {
+  username: string;
+  role: Role;
+  /** auth.CAN_UPLOAD: analysts and reviewers. */
+  can_upload: boolean;
+  /** auth.CAN_DECIDE: reviewers only (segregation of duties). */
+  can_decide: boolean;
+}
+
 export interface Health {
   ok: boolean;
   database: boolean;

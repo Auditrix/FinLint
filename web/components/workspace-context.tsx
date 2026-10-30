@@ -4,14 +4,31 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import * as api from "@/lib/api";
-import type { DataMode, FileSummary, Health, HistoryEntry, RunDetail } from "@/lib/types";
+import type { Account, DataMode, FileSummary, Health, HistoryEntry, RunDetail } from "@/lib/types";
 
 export type View = "findings" | "map" | "history" | "audit" | "evaluation";
 export const VIEWS: readonly View[] = ["findings", "map", "history", "audit", "evaluation"];
 
+/**
+ * checking: asking the API who is signed in.
+ * needed:   live, and nobody is signed in. The sign in screen shows.
+ * ready:    signed in, or the saved sample, which has no accounts.
+ */
+export type AuthState = "checking" | "needed" | "ready";
+
 interface WorkspaceState {
   mode: DataMode | null;
   health: Health | null;
+  /** The person signed in. Always null for the saved sample. */
+  account: Account | null;
+  authState: AuthState;
+  /** A message for the sign in screen, such as "no accounts exist yet". */
+  authMessage: string | null;
+  signIn: (username: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  /** In the sample everything is allowed, since nothing is written anywhere. */
+  canUpload: boolean;
+  canDecide: boolean;
   files: FileSummary[];
   file: string | null;
   run: RunDetail | null;
@@ -52,6 +69,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const [mode, setMode] = React.useState<DataMode | null>(null);
   const [health, setHealth] = React.useState<Health | null>(null);
+  const [account, setAccount] = React.useState<Account | null>(null);
+  const [authState, setAuthState] = React.useState<AuthState>("checking");
+  const [authMessage, setAuthMessage] = React.useState<string | null>(null);
   const [files, setFiles] = React.useState<FileSummary[]>([]);
   const [run, setRun] = React.useState<RunDetail | null>(null);
   const [history, setHistory] = React.useState<HistoryEntry[]>([]);
@@ -96,26 +116,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const select = React.useCallback((ref: string | null) => setParams({ cell: ref }), [setParams]);
   const selectFile = React.useCallback((name: string) => setParams({ file: name, cell: null }), [setParams]);
 
-  // Decide live or sample once, and load the list of files.
+  // Decide live or sample once, then find out who is signed in.
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const connection = await api.connect();
         if (cancelled) return;
-        // Recorded before the file list is fetched. If the API is up but the
-        // list fails, for example with the database down, the status panel
-        // must still say the API is live and report the database as off,
-        // rather than claiming nothing is connected.
+        // Recorded before anything else is fetched. If the API is up but a
+        // later call fails, for example with the database down, the status
+        // panel must still say the API is live and report the database as off.
         setMode(connection.mode);
         setHealth(connection.health);
-        const list = await api.getFiles();
+        if (connection.mode === "sample") {
+          setAuthState("ready");
+          return;
+        }
+        const who = await api.getAccount();
         if (cancelled) return;
-        setFiles(list);
-        if (list.length === 0) setLoading(false);
+        setAccount(who);
+        setAuthState(who ? "ready" : "needed");
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Could not load FinLint.");
+        // Shown on the sign in screen: "no accounts exist yet", or the
+        // database being down, are both things the person can act on.
+        setAuthMessage(e instanceof Error ? e.message : "Could not reach FinLint.");
+        setAuthState("needed");
         setLoading(false);
       }
     })();
@@ -124,12 +150,84 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const file = fileParam && files.some((f) => f.name === fileParam) ? fileParam : (files[0]?.name ?? null);
-
   // Each load gets a number, and only the newest one may write to state. Pick
   // file A then quickly file B, and A's slower answer would otherwise land
-  // last and show A's findings under B's name.
+  // last and show A's findings under B's name. Signing out also bumps it, so
+  // nothing loaded for the last person lands after they have gone.
   const latestLoad = React.useRef(0);
+
+  const forget = React.useCallback(() => {
+    latestLoad.current += 1;
+    setAccount(null);
+    setFiles([]);
+    setRun(null);
+    setHistory([]);
+    setError(null);
+    setLoading(true);
+    // A dialog open when the session ended must not reopen for the next person.
+    setUploadOpen(false);
+    setPaletteOpen(false);
+    setAuthState("needed");
+  }, []);
+
+  // A session can end while the page is open: it expires, or the person
+  // signs out in another tab. Any 401 then brings back the sign in screen.
+  React.useEffect(() => {
+    api.whenSignedOut(forget);
+    return () => api.whenSignedOut(null);
+  }, [forget]);
+
+  const signIn = React.useCallback(async (username: string, password: string) => {
+    await api.signIn(username, password);
+    // Ask again, to prove the browser kept the session cookie. It refuses to
+    // when the page and the API look like different sites (127.0.0.1 versus
+    // localhost), and signing in then looped back here with no message.
+    const who = await api.getAccount();
+    if (!who) {
+      throw new Error(
+        "Signed in, but this browser did not keep the session. Open FinLint at http://localhost:3000 or on the same address as the API.",
+      );
+    }
+    setAuthMessage(null);
+    setError(null);
+    setLoading(true);
+    setAccount(who);
+    setAuthState("ready");
+  }, []);
+
+  const signOut = React.useCallback(async () => {
+    try {
+      await api.signOut();
+    } catch {
+      /* the cookie is gone either way once the server answers or expires */
+    }
+    forget();
+  }, [forget]);
+
+  // Load the list of files once someone may see them.
+  React.useEffect(() => {
+    if (authState !== "ready") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.getFiles();
+        if (cancelled) return;
+        setFiles(list);
+        if (list.length === 0) setLoading(false);
+      } catch (e) {
+        // A 401 has already sent everyone back to the sign in screen. Writing
+        // its message here would leave it on screen for the next person.
+        if (cancelled || (e instanceof api.ApiError && e.status === 401)) return;
+        setError(e instanceof Error ? e.message : "Could not load FinLint.");
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authState, account?.username]);
+
+  const file = fileParam && files.some((f) => f.name === fileParam) ? fileParam : (files[0]?.name ?? null);
 
   const loadFile = React.useCallback(async (name: string) => {
     const ticket = ++latestLoad.current;
@@ -197,9 +295,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The sample has no accounts and writes nothing, so it shows every action.
+  const canUpload = mode !== "live" || Boolean(account?.can_upload);
+  const canDecide = mode !== "live" || Boolean(account?.can_decide);
+
   const value: WorkspaceState = {
     mode,
     health,
+    account,
+    authState,
+    authMessage,
+    signIn,
+    signOut,
+    canUpload,
+    canDecide,
     files,
     file,
     run,
